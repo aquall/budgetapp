@@ -1,0 +1,410 @@
+/* Barebones Budgeting & Personal Finance App Stylesheet */
+
+:root {
+  --bg-primary: #121417;
+  --bg-surface: #121417;
+  --bg-surface-active: #242832;
+  --bg-card: transparent;
+  --text-main: #f0f2f5;
+  --text-muted: #9aa0a6;
+  --border-color: #2d323e;
+  
+  --accent-primary: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-success: #10b981;
+  --accent-warning: #f59e0b;
+  --accent-danger: #ef4444;
+  
+  --font-family: system-ui, -apple-system, sans-serif;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+}
+
+/* Light mode overrides if system/user prefers */
+@media (prefers-color-scheme: light) {
+  :root {
+    --bg-primary: #f4f6f8;
+    --bg-surface: #f4f6f8;
+    --bg-surface-active: #e9ecef;
+    --bg-card: transparent;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --border-color: #cbd5e1;
+    --accent-primary: #2563eb;
+    --accent-hover: #1d4ed8;
+  }
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border-radius: 0 !important; /* Strictly no rounded corners */
+}
+
+body {
+  font-family: var(--font-family);
+  background-color: var(--bg-primary);
+  color: var(--text-main);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  padding-bottom: 75px;
+}
+
+/* Container */
+.main-container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 16px;
+}
+
+/* Navigation Tabs */
+.app-nav {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg-primary);
+  border-top: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-around;
+  padding: 8px 0;
+  z-index: 200;
+}
+
+@media (min-width: 768px) {
+  .app-nav {
+    position: relative;
+    bottom: auto;
+    border-top: none;
+    border-bottom: 1px solid var(--border-color);
+    justify-content: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+    margin-bottom: 24px;
+  }
+  body {
+    padding-bottom: 0;
+  }
+}
+
+.nav-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 8px 16px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+  border-bottom: 2px solid transparent;
+}
+
+.nav-btn.active, .nav-btn:hover {
+  color: var(--text-main);
+  border-bottom-color: var(--accent-primary);
+  background: transparent;
+}
+
+/* Views & Seamless Cards */
+.tab-content {
+  display: none;
+}
+
+.tab-content.active {
+  display: block;
+}
+
+.card {
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin-bottom: 28px;
+}
+
+.card-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin-bottom: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+/* Controls & Buttons */
+.btn-group {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  background: transparent;
+  color: var(--text-main);
+  border: 1px solid var(--border-color);
+  padding: 8px 14px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn:hover {
+  background: var(--border-color);
+}
+
+.btn-primary {
+  background: var(--accent-primary);
+  color: #ffffff;
+  border-color: var(--accent-primary);
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+}
+
+.btn-danger {
+  background: transparent;
+  color: var(--accent-danger);
+  border-color: var(--accent-danger);
+}
+
+.btn-danger:hover {
+  background: var(--accent-danger);
+  color: #ffffff;
+}
+
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 0.75rem;
+}
+
+.btn.active {
+  background: var(--accent-primary);
+  color: #ffffff;
+  border-color: var(--accent-primary);
+}
+
+/* Charts */
+.chart-container {
+  position: relative;
+  width: 100%;
+  height: 300px;
+  margin-top: 12px;
+}
+
+.chart-container-pie {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  height: 280px;
+  margin: 0 auto 16px auto;
+}
+
+/* Accounts List */
+.account-item {
+  border: 1px solid var(--border-color);
+  margin-bottom: 10px;
+  background: transparent;
+  overflow: hidden;
+}
+
+.account-header {
+  padding: 14px 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+}
+
+.account-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.account-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.account-name {
+  font-weight: 600;
+  font-size: 0.95rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.account-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.account-balance {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.account-details {
+  display: none;
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+  background: transparent;
+}
+
+.account-details.open {
+  display: block;
+}
+
+/* Budget Progress Cards */
+.budget-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.budget-card {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  padding: 14px;
+}
+
+.budget-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.budget-progress-bg {
+  height: 6px;
+  background: var(--border-color);
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.budget-progress-fill {
+  height: 100%;
+  background: var(--accent-success);
+  transition: width 0.3s ease;
+}
+
+.budget-progress-fill.warning {
+  background: var(--accent-warning);
+}
+
+.budget-progress-fill.danger {
+  background: var(--accent-danger);
+}
+
+.budget-subtext {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+/* Forms & Inputs */
+.form-group {
+  margin-bottom: 14px;
+}
+
+.form-label {
+  display: block;
+  font-size: 0.85rem;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--text-main);
+}
+
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 0.9rem;
+}
+
+.form-control option {
+  background: #121417;
+  color: #f0f2f5;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+
+/* Key-Value Rules List */
+.rule-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.rule-item input, .rule-item select {
+  flex: 1;
+}
+
+/* Summary Grid Numbers */
+.summary-overview {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.summary-stat-box {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  padding: 14px;
+}
+
+.summary-stat-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.summary-stat-value {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+.badge-tag {
+  display: inline-block;
+  padding: 2px 6px;
+  border: 1px solid currentColor;
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.badge-spending {
+  color: var(--accent-warning);
+}
+
+.badge-savings {
+  color: var(--accent-success);
+}

@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#121417">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Barebones Budget & Personal Finance</title>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Chart.js for lightweight line & pie visualizations -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Plaid Link Client SDK -->
+  <script src="https://cdn.plaid.com/link/v2/stable/link-initialize.js"></script>
+</head>
+
+<body>
+
+  <!-- Navigation Bar (Tabs) -->
+  <nav class="app-nav">
+    <button class="nav-btn active" data-tab="summary">
+      <span>Summary</span>
+    </button>
+    <button class="nav-btn" data-tab="spending">
+      <span>Spending</span>
+    </button>
+    <button class="nav-btn" data-tab="projections">
+      <span>Projections</span>
+    </button>
+    <button class="nav-btn" data-tab="settings">
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- Main Container -->
+  <main class="main-container">
+
+    <!-- ========================================== -->
+    <!-- TAB 1: ACCOUNT SUMMARY & BALANCE HISTORY   -->
+    <!-- ========================================== -->
+    <section id="tab-summary" class="tab-content active">
+      <!-- High-Level Overview Stats -->
+      <div class="summary-overview">
+        <div class="summary-stat-box">
+          <div class="summary-stat-label">Total Net Worth</div>
+          <div id="statTotalBalance" class="summary-stat-value">$0.00</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-stat-label">Savings Accounts</div>
+          <div id="statSavingsBalance" class="summary-stat-value">$0.00</div>
+        </div>
+        <div class="summary-stat-box">
+          <div class="summary-stat-label">Spending Accounts</div>
+          <div id="statSpendingBalance" class="summary-stat-value">$0.00</div>
+        </div>
+      </div>
+
+      <!-- Main Balance vs Time Line Graph -->
+      <div class="card">
+        <div class="card-title">
+          <span>Balance vs Time</span>
+          <div class="btn-group" id="summaryTimeFilters">
+            <button class="btn btn-sm" data-months="1">1M</button>
+            <button class="btn btn-sm active" data-months="3">3M</button>
+            <button class="btn btn-sm" data-months="6">6M</button>
+            <button class="btn btn-sm" data-months="12">1Y</button>
+            <button class="btn btn-sm" data-months="0">All</button>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="summaryBalanceChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Accounts Listing with Expansion for Individual Charts -->
+      <div class="card">
+        <div class="card-title">
+          <span>Accounts</span>
+          <span style="font-size:0.8rem; color:var(--text-muted); font-weight:normal;">Tap an account to expand
+            history</span>
+        </div>
+        <div id="accountsListContainer">
+          <!-- Account Items dynamically injected -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 2: SPENDING BREAKDOWN & BUDGET GOALS   -->
+    <!-- ========================================== -->
+    <section id="tab-spending" class="tab-content">
+      <div class="card">
+        <div class="card-title">
+          <span>Withdrawals Breakdown</span>
+          <div class="btn-group" id="spendingTimeFilters">
+            <button class="btn btn-sm" data-days="30">30 Days</button>
+            <button class="btn btn-sm active" data-days="90">90 Days</button>
+            <button class="btn btn-sm" data-days="180">180 Days</button>
+          </div>
+        </div>
+
+        <div class="chart-container-pie">
+          <canvas id="spendingPieChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Spending vs Budget Goals Analysis -->
+      <div class="card">
+        <div class="card-title">
+          <span>Budget Analysis (Monthly Average)</span>
+          <button id="btnEditBudgetsQuick" class="btn btn-sm">Adjust Goals</button>
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+          Comparing monthly average spend from designated spending accounts against defined category budget targets.
+        </p>
+        <div id="budgetAnalysisContainer" class="budget-grid">
+          <!-- Dynamic Budget Progress Cards -->
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 3: FINANCIAL PROJECTION TOOL           -->
+    <!-- ========================================== -->
+    <section id="tab-projections" class="tab-content">
+      <!-- Top Extrapolation Graph -->
+      <div class="card">
+        <div class="card-title">
+          <span>Extrapolated Balance Projection</span>
+          <span id="projectionModelBadge" class="badge-tag badge-savings">Linear Fit</span>
+        </div>
+        <div class="chart-container">
+          <canvas id="projectionChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Projection Parameters Form -->
+      <div class="card">
+        <div class="card-title">Projection Configuration</div>
+        <form id="formProjections">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="projAccountSelect">Select Accounts</label>
+              <select id="projAccountSelect" class="form-control">
+                <option value="ALL">All Accounts (Combined)</option>
+                <option value="SPENDING">Spending Accounts Only</option>
+                <option value="SAVINGS">Savings Accounts Only</option>
+                <!-- Specific accounts injected dynamically -->
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="projTrainWindow">Historical Data Window</label>
+              <select id="projTrainWindow" class="form-control">
+                <option value="30">Last 1 Month</option>
+                <option value="90" selected>Last 3 Months</option>
+                <option value="180">Last 6 Months</option>
+                <option value="365">Last 1 Year</option>
+                <option value="0">All Historical Data</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="projModelType">Extrapolation Model</label>
+              <select id="projModelType" class="form-control">
+                <option value="linear">Linear Regression Fit</option>
+                <option value="exponential">Exponential Growth / Interest Fit</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label class="form-label" for="projFutureHorizon">Projection Horizon</label>
+              <select id="projFutureHorizon" class="form-control">
+                <option value="6">6 Months Future</option>
+                <option value="12" selected>1 Year Future</option>
+                <option value="36">3 Years Future</option>
+                <option value="60">5 Years Future</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Exponential Fit Custom Parameters (Conditional) -->
+          <div id="exponentialParams"
+            style="display:none; padding:12px; border:1px solid var(--border-color); margin-top:8px;">
+            <div class="card-title" style="font-size:0.9rem;">Exponential Custom Parameters</div>
+            <div class="form-row">
+              <div class="form-group">
+                <label class="form-label" for="projInterestRate">Annual Interest Rate (%)</label>
+                <input type="number" id="projInterestRate" class="form-control" value="5.0" step="0.1" min="0"
+                  max="100">
+              </div>
+              <div class="form-group">
+                <label class="form-label" for="projMonthlyDeposit">Recurring Deposit ($ / Month)</label>
+                <input type="number" id="projMonthlyDeposit" class="form-control" value="250" step="10">
+              </div>
+            </div>
+          </div>
+        </form>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 4: SETTINGS & CONFIGURATION            -->
+    <!-- ========================================== -->
+    <section id="tab-settings" class="tab-content">
+
+      <!-- Plaid Connection Setup -->
+      <div class="card">
+        <div class="card-title">
+          <span>Plaid API Connection</span>
+          <div class="btn-group">
+            <span id="plaidBadge" class="plaid-badge">Mock Mode</span>
+            <button id="btnConnectPlaidLink" class="btn btn-primary btn-sm">Launch Plaid Link</button>
+          </div>
+        </div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+          Configure your Plaid trial API credentials to sync bank data. Toggle Demo Mode to test with instant data.
+        </p>
+
+        <form id="formPlaidSettings">
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="plaidClientId">Plaid Client ID</label>
+              <input type="text" id="plaidClientId" class="form-control" placeholder="Enter Client ID">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="plaidSecret">Plaid Secret</label>
+              <input type="password" id="plaidSecret" class="form-control" placeholder="Enter Secret">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label" for="plaidEnv">Environment</label>
+              <select id="plaidEnv" class="form-control">
+                <option value="sandbox">Sandbox (Testing)</option>
+                <option value="development">Development</option>
+                <option value="production">Production</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="plaidAccessToken">Access Token (Optional Direct Input)</label>
+              <input type="password" id="plaidAccessToken" class="form-control" placeholder="access-sandbox-xxx">
+            </div>
+          </div>
+
+          <div style="display:flex; gap:8px; margin-top:8px; flex-wrap:wrap;">
+            <button type="submit" class="btn btn-primary">Save Credentials</button>
+            <button type="button" id="btnSyncPlaidData" class="btn">Fetch / Sync Plaid Data</button>
+          </div>
+        </form>
+      </div>
+
+      <!-- Account Designation (Spending vs Savings) -->
+      <div class="card">
+        <div class="card-title">Account Type Designations</div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+          Designate accounts as <strong>Spending</strong> (used for pie breakdown & budget analysis) or
+          <strong>Savings</strong> (excluded from spending pie).
+        </p>
+        <div id="accountDesignationList">
+          <!-- Injected dynamically -->
+        </div>
+      </div>
+
+      <!-- Budget Goals Editor -->
+      <div class="card">
+        <div class="card-title">Monthly Budget Goals</div>
+        <form id="formBudgetGoals">
+          <div class="form-row" id="budgetGoalsFormGrid">
+            <!-- Form fields for Rent, Groceries, Utilities, Leisure, Travel, Other injected -->
+          </div>
+          <button type="submit" class="btn btn-primary" style="margin-top:12px;">Save Budget Goals</button>
+        </form>
+      </div>
+
+      <!-- Keyword Rules Editor -->
+      <div class="card">
+        <div class="card-title">Category Keyword Mapping Rules</div>
+        <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
+          Withdrawal descriptions matching these keywords are automatically classified into spending categories.
+        </p>
+        <div id="keywordRulesContainer">
+          <!-- Keyword rule rows -->
+        </div>
+        <div style="display:flex; gap:8px; margin-top:12px;">
+          <button type="button" id="btnAddKeywordRule" class="btn btn-sm">+ Add Keyword Rule</button>
+          <button type="button" id="btnSaveKeywordRules" class="btn btn-primary btn-sm">Save Rules</button>
+        </div>
+      </div>
+
+      <!-- Data Backup / Reset / Demo Data -->
+      <div class="card">
+        <div class="card-title">Data Management</div>
+        <div class="btn-group">
+          <button id="btnQuickDemo" class="btn btn-sm btn-primary">Load Demo Data</button>
+          <button id="btnExportData" class="btn btn-sm">Export Data (JSON)</button>
+          <button id="btnImportData" class="btn btn-sm">Import Data (JSON)</button>
+          <input type="file" id="importFileInput" accept=".json" style="display:none;">
+          <button id="btnResetData" class="btn btn-sm btn-danger">Reset All Data</button>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Modular Application JavaScripts -->
+  <script src="js/plaid.js"></script>
+  <script src="js/summary.js"></script>
+  <script src="js/spending.js"></script>
+  <script src="js/projection.js"></script>
+  <script src="js/settings.js"></script>
+  <script src="js/app.js"></script>
+</body>
+
+</html>
