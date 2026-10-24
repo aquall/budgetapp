@@ -200,42 +200,73 @@ window.PlaidModule = (function () {
     };
   }
 
-  /**
-   * Initializes Plaid Link script launcher if Link Token or Client Credentials exist
-   */
-  function launchPlaidLink(onSuccessCallback, onExitCallback) {
-    if (typeof Plaid === "undefined") {
-      alert("Plaid Link SDK is loading or blocked by browser extensions. Please try again.");
-      return;
+  async function request(path, body) {
+    let response;
+    try {
+      response = await fetch(path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+    } catch (error) {
+      throw new Error("Could not reach the Plaid service. Start the app with `node server.js` and try again.");
     }
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const details = result.code ? ` (${result.code})` : "";
+      throw new Error(`${result.error || "Plaid request failed."}${details}`);
+    }
+    return result;
+  }
 
-    // In Sandbox mode, we simulate Plaid Link token exchange
+  /** Creates a real Plaid Link session from a server-generated, short-lived token. */
+  async function launchPlaidLink(config, onSuccessCallback, onExitCallback) {
+    if (typeof Plaid === "undefined") {
+      throw new Error("Plaid Link could not load. Check your connection or browser extensions, then reload the app.");
+    }
+    const session = await request("/api/plaid/link-token", {
+      clientId: config.clientId,
+      secret: config.secret,
+      env: config.env
+    });
     const handler = Plaid.create({
-      token: 'link-sandbox-demo-token', // Placeholder for Plaid Link Token
-      onSuccess: function (public_token, metadata) {
-        console.log("Plaid Link Success!", public_token, metadata);
-        if (onSuccessCallback) onSuccessCallback(public_token, metadata);
-      },
-      onExit: function (err, metadata) {
-        if (err != null) {
-          console.warn("Plaid Link Exit with error:", err);
+      token: session.link_token,
+      onSuccess: async (publicToken, metadata) => {
+        try {
+          await request("/api/plaid/exchange", { connectionId: session.connectionId, publicToken });
+          const data = await request("/api/plaid/sync", { connectionId: session.connectionId });
+          if (onSuccessCallback) await onSuccessCallback(data, metadata, session.connectionId);
+        } catch (error) {
+          if (onExitCallback) onExitCallback(error);
         }
-        if (onExitCallback) onExitCallback(err, metadata);
+      },
+      onExit: (error, metadata) => {
+        if (error) console.warn("Plaid Link exited with an error:", error);
+        if (onExitCallback) onExitCallback(error, metadata);
       }
     });
+    handler.open();
+    return session;
+  }
 
-    try {
-      handler.open();
-    } catch (e) {
-      console.log("Sandbox launch fallback triggered");
-      alert("Plaid Sandbox Link Simulator: Token exchange verified! Syncing data...");
-      if (onSuccessCallback) onSuccessCallback("public-sandbox-mock-token", { institution: { name: "Chase Sandbox Bank" } });
-    }
+  async function syncPlaidData(connectionId) {
+    return request("/api/plaid/sync", { connectionId });
+  }
+
+  async function disconnectPlaid(connectionId) {
+    if (connectionId) await request("/api/plaid/disconnect", { connectionId });
+  }
+
+  async function getConnectionStatus(connectionId) {
+    return request("/api/plaid/status", { connectionId });
   }
 
   return {
     DEFAULT_PLAID_CONFIG,
     generateMockData,
-    launchPlaidLink
+    launchPlaidLink,
+    syncPlaidData,
+    disconnectPlaid,
+    getConnectionStatus
   };
 })();

@@ -353,6 +353,19 @@ body {
   gap: 14px;
 }
 
+.plaid-status {
+  margin: 10px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.plaid-status[hidden] { display: none; }
+.plaid-status.info { color: var(--text-main); }
+.plaid-status.success { color: var(--accent-success); border-color: var(--accent-success); }
+.plaid-status.error { color: var(--accent-danger, #ff6b6b); border-color: var(--accent-danger, #ff6b6b); }
+
 /* Key-Value Rules List */
 .rule-item {
   display: flex;

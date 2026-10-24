@@ -217,8 +217,9 @@
           </div>
         </div>
         <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
-          Configure your Plaid trial API credentials to sync bank data. Toggle Demo Mode to test with instant data.
+          Save your Plaid Sandbox credentials, then launch Link and choose a test institution. Your secret stays in memory for this session and is never saved in browser storage. Start this app with <code>node server.js</code> so its local server can securely create Link tokens and exchange them.
         </p>
+        <p id="plaidStatus" class="plaid-status" role="status" aria-live="polite" hidden></p>
 
         <form id="formPlaidSettings">
           <div class="form-row">
@@ -228,7 +229,7 @@
             </div>
             <div class="form-group">
               <label class="form-label" for="plaidSecret">Plaid Secret</label>
-              <input type="password" id="plaidSecret" class="form-control" placeholder="Enter Secret">
+              <input type="password" id="plaidSecret" class="form-control" placeholder="Enter Secret" autocomplete="new-password">
             </div>
           </div>
           <div class="form-row">
@@ -239,10 +240,6 @@
                 <option value="development">Development</option>
                 <option value="production">Production</option>
               </select>
-            </div>
-            <div class="form-group">
-              <label class="form-label" for="plaidAccessToken">Access Token (Optional Direct Input)</label>
-              <input type="password" id="plaidAccessToken" class="form-control" placeholder="access-sandbox-xxx">
             </div>
           </div>
 

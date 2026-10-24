@@ -8,9 +8,9 @@
   let appState = {
     plaidConfig: {
       clientId: "",
-      secret: "",
       env: "sandbox",
-      accessToken: "",
+      connectionId: "",
+      institution: "",
       isConnected: false
     },
     accounts: [],
@@ -39,6 +39,8 @@
   let currentTab = "summary";
   let summaryMonths = 3;
   let spendingDays = 90;
+  let plaidSecret = "";
+  let plaidConnectionId = "";
 
   /**
    * LocalStorage Helpers
@@ -49,6 +51,12 @@
       if (stored) {
         const parsed = JSON.parse(stored);
         appState = { ...appState, ...parsed };
+        appState.plaidConfig = { ...appState.plaidConfig, ...(parsed.plaidConfig || {}) };
+        // Older versions stored secrets and fake access tokens in localStorage. Drop them on load.
+        delete appState.plaidConfig.secret;
+        delete appState.plaidConfig.accessToken;
+        delete appState.plaidConfig.connectionId;
+        appState.plaidConfig.isConnected = false;
       }
     } catch (e) {
       console.warn("Failed to load state from localStorage:", e);
@@ -82,12 +90,54 @@
     const badge = document.getElementById("plaidBadge");
     if (!badge) return;
     if (appState.plaidConfig.isConnected) {
-      badge.textContent = "Plaid Connected";
+      badge.textContent = appState.plaidConfig.institution ? `Connected: ${appState.plaidConfig.institution}` : "Plaid Connected";
       badge.className = "plaid-badge connected";
     } else {
       badge.textContent = "Mock Mode";
       badge.className = "plaid-badge";
     }
+  }
+
+  function setPlaidStatus(message, kind = "info") {
+    const status = document.getElementById("plaidStatus");
+    if (!status) return;
+    status.textContent = message;
+    status.className = `plaid-status ${kind}`;
+    status.hidden = !message;
+  }
+
+  function applyPlaidData(data) {
+    const accounts = (data.accounts || []).map(account => {
+      const subtype = account.subtype || account.type || "account";
+      const name = account.name || "Bank account";
+      const currentBalance = Number(account.balances?.current) || 0;
+      const availableBalance = account.balances?.available == null ? currentBalance : Number(account.balances.available);
+      const id = account.account_id;
+      return {
+        id,
+        name,
+        officialName: account.official_name || `${subtype}${account.mask ? ` ••••${account.mask}` : ""}`,
+        type: account.type === "depository" && /savings|money market/i.test(subtype) ? "savings" : "spending",
+        subtype,
+        mask: account.mask || "",
+        currentBalance,
+        availableBalance
+      };
+    });
+    const transactions = (data.transactions || []).map(transaction => ({
+      id: transaction.transaction_id,
+      accountId: transaction.account_id,
+      date: transaction.date || transaction.authorized_date,
+      amount: Number(transaction.amount) || 0,
+      name: transaction.merchant_name || transaction.name || "Transaction",
+      category: String(transaction.personal_finance_category?.primary || transaction.category?.[0] || "other").toLowerCase().replaceAll("_", " ")
+    }));
+    const date = new Date().toISOString().slice(0, 10);
+    const snapshot = { date, total: accounts.reduce((sum, account) => sum + account.currentBalance, 0) };
+    accounts.forEach(account => { snapshot[account.id] = account.currentBalance; });
+    appState.accounts = accounts;
+    appState.transactions = transactions;
+    appState.balanceHistory = accounts.length ? [snapshot] : [];
   }
 
   /**
@@ -237,50 +287,89 @@
       updateProjectionView();
     });
 
-    // Tab 4: Plaid Form Submit
-    document.getElementById("formPlaidSettings")?.addEventListener("submit", (e) => {
+    // Plaid settings are kept in memory only; the server never saves credentials to browser storage.
+    document.getElementById("formPlaidSettings")?.addEventListener("submit", async (e) => {
       e.preventDefault();
-      appState.plaidConfig.clientId = document.getElementById("plaidClientId").value.trim();
-      appState.plaidConfig.secret = document.getElementById("plaidSecret").value.trim();
-      appState.plaidConfig.env = document.getElementById("plaidEnv").value;
-      appState.plaidConfig.accessToken = document.getElementById("plaidAccessToken").value.trim();
-      
-      if (appState.plaidConfig.clientId && appState.plaidConfig.accessToken) {
-        appState.plaidConfig.isConnected = true;
+      const clientId = document.getElementById("plaidClientId").value.trim();
+      const secret = document.getElementById("plaidSecret").value.trim();
+      const env = document.getElementById("plaidEnv").value;
+      if (!clientId || !secret) {
+        setPlaidStatus("Enter both your Plaid Client ID and Secret before saving.", "error");
+        return;
       }
-      
+      const credentialsChanged = clientId !== appState.plaidConfig.clientId || secret !== plaidSecret || env !== appState.plaidConfig.env;
+      if (credentialsChanged && plaidConnectionId) {
+        try { await window.PlaidModule.disconnectPlaid(plaidConnectionId); } catch { /* Expired server sessions are safe to discard. */ }
+        plaidConnectionId = "";
+        sessionStorage.removeItem("budgetapp_plaid_connection_id");
+        appState.plaidConfig.isConnected = false;
+        appState.plaidConfig.institution = "";
+      }
+      appState.plaidConfig.clientId = clientId;
+      plaidSecret = secret;
+      appState.plaidConfig.env = env;
       saveStateToStorage();
-      updatePlaidBadge();
-      alert("Plaid settings saved successfully.");
+      setPlaidStatus("Credentials saved for this browser session. Launch Plaid Link to connect a bank.", "info");
     });
 
-    // Tab 4: Launch Plaid Link
-    document.getElementById("btnConnectPlaidLink")?.addEventListener("click", () => {
-      window.PlaidModule.launchPlaidLink(
-        (public_token, metadata) => {
-          appState.plaidConfig.accessToken = `access-sandbox-${Date.now()}`;
-          appState.plaidConfig.isConnected = true;
-          saveStateToStorage();
-          updatePlaidBadge();
-          alert(`Successfully connected account: ${metadata.institution.name}. Synchronizing transactions...`);
-          if (appState.accounts.length === 0) {
-            loadDemoData();
+    // Plaid Link creates a short-lived token, then exchanges and syncs through the local server.
+    document.getElementById("btnConnectPlaidLink")?.addEventListener("click", async () => {
+      const button = document.getElementById("btnConnectPlaidLink");
+      if (!appState.plaidConfig.clientId || !plaidSecret) {
+        setPlaidStatus("Save your Plaid Client ID and Secret first. They are only kept in memory for this session.", "error");
+        document.getElementById("plaidClientId")?.focus();
+        return;
+      }
+      button.disabled = true;
+      button.textContent = "Preparing Plaid Link…";
+      setPlaidStatus("Connecting securely to Plaid…", "info");
+      try {
+        await window.PlaidModule.launchPlaidLink(
+          async (data, metadata, connectionId) => {
+            setPlaidStatus("Bank connected. Loading accounts and transactions…", "info");
+            const institution = metadata?.institution?.name || "your bank";
+            applyPlaidData(data);
+            plaidConnectionId = connectionId;
+            sessionStorage.setItem("budgetapp_plaid_connection_id", connectionId);
+            appState.plaidConfig.institution = institution;
+            appState.plaidConfig.isConnected = true;
+            saveStateToStorage();
+            refreshCurrentView();
+            setPlaidStatus(`Connected to ${institution}. Accounts and transactions are up to date.`, "success");
+          },
+          (error) => {
+            if (error) setPlaidStatus(error.message || "Plaid Link closed with an error. Please try again.", "error");
+            else setPlaidStatus("Plaid Link was closed before the bank connection finished.", "info");
           }
-        },
-        (err) => {
-          console.log("Plaid Link closed");
-        }
-      );
+        );
+      } catch (error) {
+        setPlaidStatus(error.message || "Could not start Plaid Link.", "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Launch Plaid Link";
+      }
     });
 
-    // Tab 4: Sync Plaid Data Button
-    document.getElementById("btnSyncPlaidData")?.addEventListener("click", () => {
-      alert("Plaid Sync: Synchronized latest balance snapshots and transactions.");
-      if (appState.accounts.length === 0) {
-        loadDemoData();
-      } else {
+    document.getElementById("btnSyncPlaidData")?.addEventListener("click", async () => {
+      if (!plaidConnectionId) {
+        setPlaidStatus("Connect a bank with Plaid Link before syncing.", "error");
+        return;
+      }
+      const button = document.getElementById("btnSyncPlaidData");
+      button.disabled = true;
+      button.textContent = "Syncing…";
+      setPlaidStatus("Fetching the latest accounts and transactions…", "info");
+      try {
+        const data = await window.PlaidModule.syncPlaidData(plaidConnectionId);
+        applyPlaidData(data);
         saveStateToStorage();
         refreshCurrentView();
+        setPlaidStatus("Accounts and transactions are up to date.", "success");
+      } catch (error) {
+        setPlaidStatus(error.message, "error");
+      } finally {
+        button.disabled = false;
+        button.textContent = "Fetch / Sync Plaid Data";
       }
     });
 
@@ -361,8 +450,26 @@
   /**
    * App Initialization Entry Point
    */
-  function initApp() {
+  async function initApp() {
     loadStateFromStorage();
+
+    try { plaidConnectionId = sessionStorage.getItem("budgetapp_plaid_connection_id") || ""; } catch { plaidConnectionId = ""; }
+    if (plaidConnectionId) {
+      try {
+        const connection = await window.PlaidModule.getConnectionStatus(plaidConnectionId);
+        appState.plaidConfig.isConnected = Boolean(connection.connected);
+        if (!connection.connected) {
+          plaidConnectionId = "";
+          sessionStorage.removeItem("budgetapp_plaid_connection_id");
+          setPlaidStatus("Your Plaid server session has expired. Save your credentials again and reconnect the bank.", "info");
+        }
+      } catch {
+        appState.plaidConfig.isConnected = false;
+        plaidConnectionId = "";
+        sessionStorage.removeItem("budgetapp_plaid_connection_id");
+        setPlaidStatus("Could not restore the Plaid session. Save your credentials and reconnect the bank.", "info");
+      }
+    }
 
     // If initial start has no accounts, load demo data so app is immediately interactive!
     if (!appState.accounts || appState.accounts.length === 0) {

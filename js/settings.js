@@ -182,9 +182,8 @@ window.SettingsModule = (function () {
     // Populate Plaid config form fields
     const plaid = state.plaidConfig || {};
     document.getElementById("plaidClientId").value = plaid.clientId || "";
-    document.getElementById("plaidSecret").value = plaid.secret || "";
+    document.getElementById("plaidSecret").value = "";
     document.getElementById("plaidEnv").value = plaid.env || "sandbox";
-    document.getElementById("plaidAccessToken").value = plaid.accessToken || "";
 
     renderAccountDesignations(state, callbacks.onAccountTypeChange);
     renderBudgetGoalsForm(state);
