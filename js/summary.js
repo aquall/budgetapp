@@ -4,17 +4,7 @@
 window.SummaryModule = (function () {
   let mainChart = null;
   const accountCharts = {}; // Map of accountId -> Chart instance
-
-  /**
-   * Formats numbers to currency string
-   */
-  function formatCurrency(amount) {
-    const num = Number(amount) || 0;
-    return (num < 0 ? "-" : "") + "$" + Math.abs(num).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
+  const { formatCurrency, escapeHtml } = window.AppUtils;
 
   /**
    * Filters balance history by target months (0 = All)
@@ -23,9 +13,17 @@ window.SummaryModule = (function () {
     if (!history || history.length === 0) return [];
     if (!targetMonths || targetMonths === 0) return history;
 
-    const cutoff = new Date();
+    // Anchor relative windows to the newest point in the series. Imported and
+    // Plaid histories may stop before today, so a wall-clock cutoff can leave
+    // the chart with no data (or make a caller fall back to the full history).
+    const latestDate = history.reduce((latest, item) => item.date > latest ? item.date : latest, history[0].date);
+    const cutoff = new Date(`${latestDate}T12:00:00`);
+    const dayOfMonth = cutoff.getDate();
+    cutoff.setDate(1);
     cutoff.setMonth(cutoff.getMonth() - targetMonths);
-    const cutoffStr = cutoff.toISOString().split("T")[0];
+    const lastDayOfTargetMonth = new Date(cutoff.getFullYear(), cutoff.getMonth() + 1, 0).getDate();
+    cutoff.setDate(Math.min(dayOfMonth, lastDayOfTargetMonth));
+    const cutoffStr = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, "0")}-${String(cutoff.getDate()).padStart(2, "0")}`;
 
     return history.filter(item => item.date >= cutoffStr);
   }
@@ -64,10 +62,24 @@ window.SummaryModule = (function () {
     const filteredHistory = getFilteredHistory(state.balanceHistory || [], targetMonths);
     const labels = filteredHistory.map(item => item.date);
     const data = filteredHistory.map(item => item.total);
+    const emptyState = document.getElementById("summaryHistoryEmpty");
+    const hasHistory = labels.length > 1;
+    const canRenderChart = hasHistory && typeof Chart !== "undefined";
+    ctx.hidden = !canRenderChart;
+    if (emptyState) {
+      emptyState.hidden = canRenderChart;
+      emptyState.textContent = typeof Chart === "undefined"
+        ? "Charts could not load. Check your internet connection and reload the app."
+        : labels.length
+          ? "Only one historical balance is available. Sync more transactions to build a trend."
+          : "No balance history is available yet. Connect an institution and sync transactions to build a trend.";
+    }
 
     if (mainChart) {
       mainChart.destroy();
+      mainChart = null;
     }
+    if (!canRenderChart) return;
 
     mainChart = new Chart(ctx, {
       type: "line",
@@ -118,9 +130,11 @@ window.SummaryModule = (function () {
   /**
    * Renders the Accounts list and setup expandable items with individual charts
    */
-  function renderAccountsList(state) {
+  function renderAccountsList(state, targetMonths) {
     const container = document.getElementById("accountsListContainer");
     if (!container) return;
+    Object.values(accountCharts).forEach(chart => chart?.destroy());
+    Object.keys(accountCharts).forEach(accountId => delete accountCharts[accountId]);
 
     const accounts = state.accounts || [];
     if (accounts.length === 0) {
@@ -132,25 +146,26 @@ window.SummaryModule = (function () {
     accounts.forEach(acc => {
       const typeBadgeClass = acc.type === "savings" ? "badge-savings" : "badge-spending";
       html += `
-        <div class="account-item" data-acc-id="${acc.id}">
-          <div class="account-header">
-            <div class="account-info">
-              <div class="account-name">
-                ${acc.name}
-                <span class="badge-tag ${typeBadgeClass}">${acc.type}</span>
-              </div>
-              <div class="account-meta">${acc.officialName || acc.subtype}</div>
-            </div>
-            <div class="account-balance" style="color: ${acc.currentBalance < 0 ? 'var(--accent-danger)' : 'var(--text-main)'}">
+        <div class="account-item" data-acc-id="${escapeHtml(acc.id)}">
+          <button type="button" class="account-header" aria-expanded="false" aria-controls="details-${escapeHtml(acc.id)}">
+            <span class="account-info">
+              <span class="account-name">
+                ${escapeHtml(acc.name)}
+                <span class="badge-tag ${typeBadgeClass}">${escapeHtml(acc.type)}</span>
+              </span>
+              <span class="account-meta">${escapeHtml(acc.officialName || acc.subtype || "")}</span>
+            </span>
+            <span class="account-balance" style="color: ${acc.currentBalance < 0 ? 'var(--accent-danger)' : 'var(--text-main)'}">
               ${formatCurrency(acc.currentBalance)}
-            </div>
-          </div>
-          <div class="account-details" id="details-${acc.id}">
+            </span>
+          </button>
+          <div class="account-details" id="details-${escapeHtml(acc.id)}">
             <div style="font-size:0.8rem; font-weight:600; margin-bottom:6px; color:var(--text-muted);">
               Historical Balance Chart
             </div>
             <div class="chart-container" style="height:200px;">
-              <canvas id="chart-${acc.id}"></canvas>
+              <canvas id="chart-${escapeHtml(acc.id)}"></canvas>
+              <p class="account-history-empty" hidden></p>
             </div>
           </div>
         </div>
@@ -162,7 +177,7 @@ window.SummaryModule = (function () {
     // Attach click listeners to expand account details
     container.querySelectorAll(".account-header").forEach(header => {
       header.addEventListener("click", () => {
-        const item = header.parentElement;
+        const item = header.closest(".account-item");
         const accId = item.getAttribute("data-acc-id");
         const details = document.getElementById(`details-${accId}`);
         const isOpen = details.classList.contains("open");
@@ -170,9 +185,11 @@ window.SummaryModule = (function () {
         // Toggle visibility
         if (isOpen) {
           details.classList.remove("open");
+          header.setAttribute("aria-expanded", "false");
         } else {
           details.classList.add("open");
-          renderIndividualAccountChart(accId, state);
+          header.setAttribute("aria-expanded", "true");
+          renderIndividualAccountChart(accId, state, targetMonths);
         }
       });
     });
@@ -181,7 +198,7 @@ window.SummaryModule = (function () {
   /**
    * Renders individual line chart for an expanded account
    */
-  function renderIndividualAccountChart(accId, state) {
+  function renderIndividualAccountChart(accId, state, targetMonths = 0) {
     const canvasId = `chart-${accId}`;
     const ctx = document.getElementById(canvasId);
     if (!ctx) return;
@@ -190,9 +207,25 @@ window.SummaryModule = (function () {
       accountCharts[accId].destroy();
     }
 
-    const history = state.balanceHistory || [];
+    const history = getFilteredHistory(
+      state.accountHistory?.[accId] || (state.balanceHistory || []).filter(item => item[accId] !== undefined),
+      targetMonths
+    );
     const labels = history.map(item => item.date);
-    const data = history.map(item => item[accId] || 0);
+    const data = history.map(item => item.balance ?? item[accId] ?? 0);
+    const emptyState = ctx.parentElement.querySelector(".account-history-empty");
+    if (labels.length < 2 || typeof Chart === "undefined") {
+      ctx.hidden = true;
+      if (emptyState) {
+        emptyState.hidden = false;
+        emptyState.textContent = labels.length < 2
+          ? "Not enough transaction history is available for this account yet."
+          : "Charts could not load. Check your internet connection and reload the app.";
+      }
+      return;
+    }
+    ctx.hidden = false;
+    if (emptyState) emptyState.hidden = true;
 
     accountCharts[accId] = new Chart(ctx, {
       type: "line",
@@ -240,11 +273,21 @@ window.SummaryModule = (function () {
   function init(state, selectedMonths = 3) {
     renderOverviewStats(state);
     renderMainBalanceChart(state, selectedMonths);
-    renderAccountsList(state);
+    renderAccountsList(state, selectedMonths);
+  }
+
+  function updateExpandedAccountCharts(state, selectedMonths) {
+    document.querySelectorAll(".account-item").forEach(item => {
+      const details = item.querySelector(".account-details");
+      if (details?.classList.contains("open")) {
+        renderIndividualAccountChart(item.getAttribute("data-acc-id"), state, selectedMonths);
+      }
+    });
   }
 
   return {
     init,
-    renderMainBalanceChart
+    renderMainBalanceChart,
+    updateExpandedAccountCharts
   };
 })();

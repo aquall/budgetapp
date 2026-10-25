@@ -219,8 +219,18 @@ window.PlaidModule = (function () {
     return result;
   }
 
+  async function checkService() {
+    try {
+      const response = await fetch("/api/health", { cache: "no-store" });
+      // Older server processes answer 405 for this new GET route; that still proves the API is reachable.
+      return response.ok || response.status === 405;
+    } catch {
+      return false;
+    }
+  }
+
   /** Creates a real Plaid Link session from a server-generated, short-lived token. */
-  async function launchPlaidLink(config, onSuccessCallback, onExitCallback) {
+  async function launchPlaidLink(config, onSuccessCallback, onExitCallback, onEventCallback) {
     if (typeof Plaid === "undefined") {
       throw new Error("Plaid Link could not load. Check your connection or browser extensions, then reload the app.");
     }
@@ -233,9 +243,24 @@ window.PlaidModule = (function () {
       token: session.link_token,
       onSuccess: async (publicToken, metadata) => {
         try {
-          await request("/api/plaid/exchange", { connectionId: session.connectionId, publicToken });
-          const data = await request("/api/plaid/sync", { connectionId: session.connectionId });
-          if (onSuccessCallback) await onSuccessCallback(data, metadata, session.connectionId);
+          const connectionInfo = await request("/api/plaid/exchange", {
+            connectionId: session.connectionId,
+            publicToken,
+            institution: metadata?.institution?.name || ""
+          });
+          let data;
+          try {
+            data = await request("/api/plaid/sync", { connectionId: session.connectionId });
+          } catch (error) {
+            // Keep the institution linked if Plaid is still preparing its first transaction history.
+            data = {
+              accounts: [],
+              transactions: [],
+              institution: metadata?.institution?.name || "",
+              syncError: error.message
+            };
+          }
+          if (onSuccessCallback) await onSuccessCallback(data, metadata, session.connectionId, connectionInfo);
         } catch (error) {
           if (onExitCallback) onExitCallback(error);
         }
@@ -243,6 +268,9 @@ window.PlaidModule = (function () {
       onExit: (error, metadata) => {
         if (error) console.warn("Plaid Link exited with an error:", error);
         if (onExitCallback) onExitCallback(error, metadata);
+      },
+      onEvent: (eventName, metadata) => {
+        if (onEventCallback) onEventCallback(eventName, metadata);
       }
     });
     handler.open();
@@ -261,12 +289,26 @@ window.PlaidModule = (function () {
     return request("/api/plaid/status", { connectionId });
   }
 
+  async function getConnections() {
+    const response = await fetch("/api/plaid/connections", { cache: "no-store" });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || !Array.isArray(result.connections)) throw new Error(result.error || "Could not load saved Plaid connections.");
+    return result;
+  }
+
+  async function updateSavedCredentials(credentials) {
+    return request("/api/plaid/credentials", credentials);
+  }
+
   return {
     DEFAULT_PLAID_CONFIG,
     generateMockData,
+    checkService,
     launchPlaidLink,
     syncPlaidData,
     disconnectPlaid,
-    getConnectionStatus
+    getConnectionStatus,
+    getConnections,
+    updateSavedCredentials
   };
 })();

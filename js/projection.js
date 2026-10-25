@@ -3,56 +3,55 @@
  */
 window.ProjectionModule = (function () {
   let projectionChart = null;
-
-  /**
-   * Helper to format currency
-   */
-  function formatCurrency(amount) {
-    const num = Number(amount) || 0;
-    return (num < 0 ? "-" : "") + "$" + Math.abs(num).toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
+  const { formatCurrency, escapeHtml } = window.AppUtils;
 
   /**
    * Extracts historical balance series for chosen account filter & training date window
    */
   function getHistoricalSeries(state, accountSelection, trainDays) {
-    const history = state.balanceHistory || [];
+    const history = (state.balanceHistory || [])
+      .filter(item => /^\d{4}-\d{2}-\d{2}$/.test(String(item.date || "")))
+      .sort((a, b) => a.date.localeCompare(b.date));
     if (history.length === 0) return [];
 
     let filtered = history;
     const days = Number(trainDays) || 0;
     if (days > 0) {
-      const cutoff = new Date();
-      cutoff.setDate(cutoff.getDate() - days);
-      const cutoffStr = cutoff.toISOString().split("T")[0];
+      // Imported and saved histories may not include today. Fit against a
+      // window ending at the newest available balance instead of the clock.
+      const cutoff = new Date(`${history[history.length - 1].date}T00:00:00Z`);
+      cutoff.setUTCDate(cutoff.getUTCDate() - days);
+      const cutoffStr = cutoff.toISOString().slice(0, 10);
       filtered = history.filter(item => item.date >= cutoffStr);
     }
 
-    if (filtered.length === 0) filtered = history;
+    if (filtered.length === 0) return [];
+
+    const matchingAccounts = accountSelection === "SPENDING"
+      ? (state.accounts || []).filter(account => account.type === "spending")
+      : accountSelection === "SAVINGS"
+        ? (state.accounts || []).filter(account => account.type === "savings")
+        : null;
+    if (matchingAccounts && !matchingAccounts.length) return [];
 
     // Filter accounts
     return filtered.map(item => {
       let balance = 0;
       if (accountSelection === "ALL") {
-        balance = item.total;
+        balance = Number(item.total);
       } else if (accountSelection === "SPENDING") {
-        const spendingAccs = (state.accounts || []).filter(a => a.type === "spending").map(a => a.id);
-        balance = spendingAccs.reduce((sum, accId) => sum + (item[accId] || 0), 0);
+        balance = matchingAccounts.reduce((sum, account) => sum + (Number(item[account.id]) || 0), 0);
       } else if (accountSelection === "SAVINGS") {
-        const savingsAccs = (state.accounts || []).filter(a => a.type === "savings").map(a => a.id);
-        balance = savingsAccs.reduce((sum, accId) => sum + (item[accId] || 0), 0);
+        balance = matchingAccounts.reduce((sum, account) => sum + (Number(item[account.id]) || 0), 0);
       } else {
         // Specific account ID
-        balance = item[accountSelection] !== undefined ? item[accountSelection] : 0;
+        balance = Number(item[accountSelection]);
       }
       return {
         date: item.date,
         balance: Math.round(balance * 100) / 100
       };
-    });
+    }).filter(point => Number.isFinite(point.balance));
   }
 
   /**
@@ -71,21 +70,18 @@ window.ProjectionModule = (function () {
       return { x: dayOffset, y: pt.balance, date: pt.date };
     });
 
-    let sumX = 0, sumY = 0, sumXY = 0, sumXX = 0;
-    points.forEach(p => {
-      sumX += p.x;
-      sumY += p.y;
-      sumXY += p.x * p.y;
-      sumXX += p.x * p.x;
-    });
-
-    const denom = (n * sumXX - sumX * sumX);
-    const slope = denom !== 0 ? (n * sumXY - sumX * sumY) / denom : 0; // Growth rate ($ / day)
+    const meanX = points.reduce((sum, point) => sum + point.x, 0) / n;
+    const meanY = points.reduce((sum, point) => sum + point.y, 0) / n;
+    const varianceX = points.reduce((sum, point) => sum + (point.x - meanX) ** 2, 0);
+    const covariance = points.reduce((sum, point) => sum + (point.x - meanX) * (point.y - meanY), 0);
+    const slope = varianceX > 0 ? covariance / varianceX : 0; // Growth rate ($ / day)
+    const intercept = meanY - slope * meanX;
 
     // Historical points
-    const historicalFitted = series.map(pt => ({
-      date: pt.date,
-      historical: pt.balance,
+    const historicalFitted = points.map((point, index) => ({
+      date: point.date,
+      historical: series[index].balance,
+      trend: Math.round((intercept + slope * point.x) * 100) / 100,
       projected: null
     }));
 
@@ -103,15 +99,16 @@ window.ProjectionModule = (function () {
 
     for (let d = stepDays; d <= totalDays; d += stepDays) {
       const futDate = new Date(lastDate);
-      futDate.setDate(futDate.getDate() + d);
+      futDate.setUTCDate(futDate.getUTCDate() + d);
       const dateStr = futDate.toISOString().split("T")[0];
       
       // Smooth linear extrapolation: Y_end + (slope * days)
-      const projectedBal = Math.max(0, startingBal + (slope * d));
+      const projectedBal = startingBal + (slope * d);
 
       futurePoints.push({
         date: dateStr,
         historical: null,
+        trend: null,
         projected: Math.round(projectedBal * 100) / 100
       });
     }
@@ -146,7 +143,7 @@ window.ProjectionModule = (function () {
 
     for (let d = stepDays; d <= totalDays; d += stepDays) {
       const futDate = new Date(lastDate);
-      futDate.setDate(futDate.getDate() + d);
+      futDate.setUTCDate(futDate.getUTCDate() + d);
       const dateStr = futDate.toISOString().split("T")[0];
 
       const monthFraction = stepDays / 30;
@@ -171,11 +168,27 @@ window.ProjectionModule = (function () {
 
     const labels = combinedSeries.map(s => s.date);
     const historicalData = combinedSeries.map(s => s.historical);
+    const trendData = combinedSeries.map(s => s.trend ?? null);
     const projectedData = combinedSeries.map(s => s.projected);
 
     if (projectionChart) {
       projectionChart.destroy();
+      projectionChart = null;
     }
+
+    const emptyState = document.getElementById("projectionEmptyState");
+    const hasEnoughHistory = combinedSeries.filter(point => point.historical != null).length >= 2;
+    const canRenderChart = hasEnoughHistory && typeof Chart !== "undefined";
+    ctx.hidden = !canRenderChart;
+    if (emptyState) {
+      emptyState.hidden = canRenderChart;
+      emptyState.textContent = typeof Chart === "undefined"
+        ? "Charts could not load. Check your internet connection and reload the app."
+        : combinedSeries.length === 0
+          ? "No balances match this account and date window. Try All Historical Data, select another account group, or sync transactions."
+          : "At least two historical balance points are needed. Sync transaction history from an institution first.";
+    }
+    if (!canRenderChart) return;
 
     // Update UI badge indicator
     const badge = document.getElementById("projectionModelBadge");
@@ -198,6 +211,17 @@ window.ProjectionModule = (function () {
             tension: 0.1,
             pointRadius: 0
           },
+          ...(modelType === "linear" ? [{
+            label: "Fitted Linear Trend",
+            data: trendData,
+            borderColor: "#f59e0b",
+            borderDash: [3, 3],
+            backgroundColor: "transparent",
+            borderWidth: 2,
+            fill: false,
+            tension: 0,
+            pointRadius: 0
+          }] : []),
           {
             label: "Extrapolated Balance",
             data: projectedData,
@@ -264,11 +288,11 @@ window.ProjectionModule = (function () {
     `;
 
     accounts.forEach(acc => {
-      html += `<option value="${acc.id}">${acc.name} (${acc.type})</option>`;
+      html += `<option value="${escapeHtml(acc.id)}">${escapeHtml(acc.name)} (${escapeHtml(acc.type)})</option>`;
     });
 
     accSelectEl.innerHTML = html;
-    accSelectEl.value = currentVal;
+    accSelectEl.value = [...accSelectEl.options].some(option => option.value === currentVal) ? currentVal : "ALL";
   }
 
   /**
@@ -281,8 +305,12 @@ window.ProjectionModule = (function () {
     const trainDays = Number(params.trainDays !== undefined ? params.trainDays : (document.getElementById("projTrainWindow")?.value || 90));
     const modelType = params.modelType || document.getElementById("projModelType")?.value || "linear";
     const futureMonths = Number(params.futureMonths || document.getElementById("projFutureHorizon")?.value || 12);
-    const interestRate = Number(params.interestRate || document.getElementById("projInterestRate")?.value || 5.0);
-    const monthlyDeposit = Number(params.monthlyDeposit || document.getElementById("projMonthlyDeposit")?.value || 250);
+    const interestRate = Number(params.interestRate !== undefined
+      ? params.interestRate
+      : (document.getElementById("projInterestRate")?.value ?? 5.0));
+    const monthlyDeposit = Number(params.monthlyDeposit !== undefined
+      ? params.monthlyDeposit
+      : (document.getElementById("projMonthlyDeposit")?.value ?? 250));
 
     const histSeries = getHistoricalSeries(state, accSel, trainDays);
 

@@ -2,15 +2,9 @@
  * Tab 4: Settings & Configuration Module
  */
 window.SettingsModule = (function () {
+  const { escapeHtml } = window.AppUtils;
 
-  const CATEGORY_NAMES = {
-    rent: "Rent",
-    groceries: "Groceries",
-    utilities: "Utilities",
-    leisure: "Leisure",
-    travel: "Travel",
-    other: "Other"
-  };
+  const CATEGORY_NAMES = window.AppUtils.categoryLabels;
 
   /**
    * Render Account Spending vs Savings designation toggles
@@ -30,11 +24,11 @@ window.SettingsModule = (function () {
       html += `
         <div style="display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--border-color);">
           <div>
-            <div style="font-weight:600; font-size:0.9rem;">${acc.name}</div>
-            <div style="font-size:0.75rem; color:var(--text-muted);">${acc.officialName || acc.subtype}</div>
+            <div style="font-weight:600; font-size:0.9rem;">${escapeHtml(acc.name)}</div>
+            <div style="font-size:0.75rem; color:var(--text-muted);">${escapeHtml(acc.officialName || acc.subtype || "")}</div>
           </div>
           <div>
-            <select class="form-control btn-sm acc-type-select" data-acc-id="${acc.id}" style="width:130px;">
+            <select class="form-control btn-sm acc-type-select" data-acc-id="${escapeHtml(acc.id)}" style="width:130px;">
               <option value="spending" ${acc.type === "spending" ? "selected" : ""}>Spending</option>
               <option value="savings" ${acc.type === "savings" ? "selected" : ""}>Savings</option>
             </select>
@@ -54,6 +48,35 @@ window.SettingsModule = (function () {
           onAccountTypeChange(accId, newType);
         }
       });
+    });
+  }
+
+  function renderPlaidConnections(connections, onDisconnect) {
+    const container = document.getElementById("plaidConnectionsList");
+    if (!container) return;
+    container.replaceChildren();
+
+    if (!connections?.length) {
+      const empty = document.createElement("p");
+      empty.className = "plaid-connections-empty";
+      empty.textContent = "No institutions connected yet.";
+      container.appendChild(empty);
+      return;
+    }
+
+    connections.forEach(connection => {
+      const row = document.createElement("div");
+      row.className = "plaid-connection-row";
+      const name = document.createElement("span");
+      name.textContent = connection.institution || "Institution";
+      const disconnect = document.createElement("button");
+      disconnect.type = "button";
+      disconnect.className = "btn btn-sm btn-danger";
+      disconnect.textContent = "Disconnect";
+      disconnect.setAttribute("aria-label", `Disconnect ${connection.institution || "institution"}`);
+      disconnect.addEventListener("click", () => onDisconnect?.(connection.connectionId));
+      row.append(name, disconnect);
+      container.appendChild(row);
     });
   }
 
@@ -79,7 +102,7 @@ window.SettingsModule = (function () {
       html += `
         <div class="form-group">
           <label class="form-label" for="budgetGoal_${cat}">${CATEGORY_NAMES[cat]} ($ / Month)</label>
-          <input type="number" id="budgetGoal_${cat}" class="form-control budget-goal-input" data-cat="${cat}" value="${val}" min="0" step="10">
+          <input type="number" id="budgetGoal_${cat}" class="form-control budget-goal-input" data-cat="${cat}" value="${escapeHtml(val)}" min="0" step="10">
         </div>
       `;
     });
@@ -108,13 +131,13 @@ window.SettingsModule = (function () {
     rules.forEach((rule, idx) => {
       html += `
         <div class="rule-item" data-rule-idx="${idx}">
-          <input type="text" class="form-control rule-keyword" value="${rule.keyword}" placeholder="Keyword (e.g. Trader Joe)">
+          <input type="text" class="form-control rule-keyword" value="${escapeHtml(rule.keyword)}" placeholder="Keyword (e.g. Trader Joe)">
           <select class="form-control rule-category">
             ${Object.keys(CATEGORY_NAMES).map(cat => `
               <option value="${cat}" ${rule.category === cat ? "selected" : ""}>${CATEGORY_NAMES[cat]}</option>
             `).join("")}
           </select>
-          <button type="button" class="btn btn-sm btn-danger btn-remove-rule">X</button>
+          <button type="button" class="btn btn-sm btn-danger btn-remove-rule" aria-label="Remove category rule">Remove</button>
         </div>
       `;
     });
@@ -165,7 +188,7 @@ window.SettingsModule = (function () {
           <option value="${cat}">${CATEGORY_NAMES[cat]}</option>
         `).join("")}
       </select>
-      <button type="button" class="btn btn-sm btn-danger btn-remove-rule">X</button>
+      <button type="button" class="btn btn-sm btn-danger btn-remove-rule" aria-label="Remove category rule">Remove</button>
     `;
 
     div.querySelector(".btn-remove-rule").addEventListener("click", () => {
@@ -184,6 +207,7 @@ window.SettingsModule = (function () {
     document.getElementById("plaidClientId").value = plaid.clientId || "";
     document.getElementById("plaidSecret").value = "";
     document.getElementById("plaidEnv").value = plaid.env || "sandbox";
+    renderPlaidConnections(state.plaidSessionConnections || [], callbacks.onDisconnect);
 
     renderAccountDesignations(state, callbacks.onAccountTypeChange);
     renderBudgetGoalsForm(state);

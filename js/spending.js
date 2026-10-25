@@ -3,6 +3,7 @@
  */
 window.SpendingModule = (function () {
   let pieChart = null;
+  const { formatCurrency, escapeHtml } = window.AppUtils;
 
   const CATEGORY_COLORS = {
     rent: "#ef4444",      // Red
@@ -13,49 +14,31 @@ window.SpendingModule = (function () {
     other: "#64748b"      // Slate/Gray
   };
 
-  const CATEGORY_LABELS = {
-    rent: "Rent",
-    groceries: "Groceries",
-    utilities: "Utilities",
-    leisure: "Leisure",
-    travel: "Travel",
-    other: "Other"
-  };
-
-  /**
-   * Helper to format currency
-   */
-  function formatCurrency(amount) {
-    const num = Number(amount) || 0;
-    return "$" + num.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2
-    });
-  }
+  const CATEGORY_LABELS = window.AppUtils.categoryLabels;
 
   /**
    * Categorizes a transaction description based on user defined keyword rules
    */
   function classifyCategory(txName, defaultCat, keywordRules) {
     if (!txName) return defaultCat || "other";
-    const nameLower = txName.toLowerCase();
+    const nameLower = String(txName).toLowerCase();
 
     if (keywordRules && Array.isArray(keywordRules)) {
       for (const rule of keywordRules) {
-        if (rule.keyword && nameLower.includes(rule.keyword.toLowerCase())) {
+        if (typeof rule?.keyword === "string" && rule.keyword && nameLower.includes(rule.keyword.toLowerCase())) {
           return rule.category;
         }
       }
     }
 
-    const catLower = (defaultCat || "").toLowerCase();
+    const catLower = String(defaultCat || "").toLowerCase();
     if (CATEGORY_LABELS[catLower]) return catLower;
 
     // Default fallback heuristics
     if (nameLower.includes("rent") || nameLower.includes("equity")) return "rent";
     if (nameLower.includes("trader") || nameLower.includes("groc") || nameLower.includes("market") || nameLower.includes("whole foods")) return "groceries";
     if (nameLower.includes("coned") || nameLower.includes("electric") || nameLower.includes("verizon") || nameLower.includes("water") || nameLower.includes("gas")) return "utilities";
-    if (nameLower.includes("steam") || nameLower.includes("starbucks") || nameLower.includes("cafe") || nameLower.includes("cinema") || nameLower.includes("bar")) return "leisure";
+    if (nameLower.includes("steam") || nameLower.includes("starbucks") || nameLower.includes("cafe") || nameLower.includes("cinema") || /\bbar\b/.test(nameLower)) return "leisure";
     if (nameLower.includes("airline") || nameLower.includes("flight") || nameLower.includes("hotel") || nameLower.includes("delta") || nameLower.includes("uber")) return "travel";
 
     return "other";
@@ -69,9 +52,15 @@ window.SpendingModule = (function () {
       (state.accounts || []).filter(a => a.type === "spending").map(a => a.id)
     );
 
-    const cutoff = new Date();
-    cutoff.setDate(cutoff.getDate() - targetDays);
-    const cutoffStr = cutoff.toISOString().split("T")[0];
+    const datedTransactions = (state.transactions || [])
+      .filter(tx => /^\d{4}-\d{2}-\d{2}$/.test(String(tx.date || "")) && !tx.pending)
+      .map(tx => tx.date)
+      .sort();
+    const latestDate = datedTransactions[datedTransactions.length - 1];
+    if (!latestDate) return [];
+    const cutoff = new Date(`${latestDate}T00:00:00Z`);
+    cutoff.setUTCDate(cutoff.getUTCDate() - targetDays);
+    const cutoffStr = cutoff.toISOString().slice(0, 10);
 
     const rules = state.keywordRules || [];
 
@@ -79,14 +68,18 @@ window.SpendingModule = (function () {
     (state.transactions || []).forEach(tx => {
       // Check if account is spending account
       if (!spendingAccIds.has(tx.accountId)) return;
+      if (tx.pending) return;
+      if (/transfer|loan payment/i.test(String(tx.category || ""))) return;
       // Filter for withdrawals (amount > 0 in standard accounting convention)
-      if (tx.amount <= 0) return;
+      const amount = Number(tx.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return;
       // Date cutoff filter
-      if (tx.date < cutoffStr) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tx.date || "")) || tx.date < cutoffStr) return;
 
       const category = classifyCategory(tx.name, tx.category, rules);
       withdrawals.push({
         ...tx,
+        amount,
         classifiedCategory: category
       });
     });
@@ -100,6 +93,16 @@ window.SpendingModule = (function () {
   function renderSpendingPieChart(withdrawals) {
     const ctx = document.getElementById("spendingPieChart");
     if (!ctx) return;
+    const emptyState = document.getElementById("spendingEmptyState");
+    const hasSpending = withdrawals.length > 0;
+    const canRenderChart = hasSpending && typeof Chart !== "undefined";
+    ctx.hidden = !canRenderChart;
+    if (emptyState) {
+      emptyState.hidden = canRenderChart;
+      emptyState.textContent = typeof Chart === "undefined"
+        ? "Charts could not load. Check your internet connection and reload the app."
+        : "No posted withdrawals found for spending accounts in this period. Connect or sync an account, or check its type under Settings.";
+    }
 
     // Aggregate totals per category
     const categoryTotals = {
@@ -126,7 +129,9 @@ window.SpendingModule = (function () {
 
     if (pieChart) {
       pieChart.destroy();
+      pieChart = null;
     }
+    if (!canRenderChart) return categoryTotals;
 
     pieChart = new Chart(ctx, {
       type: "pie",
@@ -174,6 +179,10 @@ window.SpendingModule = (function () {
   function renderBudgetAnalysis(state, withdrawals, targetDays = 90) {
     const container = document.getElementById("budgetAnalysisContainer");
     if (!container) return;
+    if (!withdrawals.length) {
+      container.innerHTML = `<p class="chart-empty-state">Budget comparisons appear after posted withdrawals are available.</p>`;
+      return;
+    }
 
     // Calculate monthly multiplier (targetDays / 30) to compute monthly average spent
     const monthRatio = Math.max(1, targetDays / 30);
@@ -224,7 +233,7 @@ window.SpendingModule = (function () {
       html += `
         <div class="budget-card">
           <div class="budget-header">
-            <span>${CATEGORY_LABELS[cat] || cat}</span>
+          <span>${escapeHtml(CATEGORY_LABELS[cat] || cat)}</span>
             <span style="color:${isOverBudget ? 'var(--accent-danger)' : 'var(--text-main)'}">
               ${formatCurrency(monthlyAvgSpent)} / ${formatCurrency(targetBudget)}
             </span>

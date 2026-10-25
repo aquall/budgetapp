@@ -3,7 +3,7 @@
 
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="theme-color" content="#121417">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -18,28 +18,30 @@
 <body>
 
   <!-- Navigation Bar (Tabs) -->
-  <nav class="app-nav">
-    <button class="nav-btn active" data-tab="summary">
+  <nav class="app-nav" aria-label="Main navigation">
+    <button type="button" class="nav-btn active" data-tab="summary" aria-current="page">
       <span>Summary</span>
     </button>
-    <button class="nav-btn" data-tab="spending">
+    <button type="button" class="nav-btn" data-tab="spending">
       <span>Spending</span>
     </button>
-    <button class="nav-btn" data-tab="projections">
+    <button type="button" class="nav-btn" data-tab="projections">
       <span>Projections</span>
     </button>
-    <button class="nav-btn" data-tab="settings">
+    <button type="button" class="nav-btn" data-tab="settings">
       <span>Settings</span>
     </button>
   </nav>
 
   <!-- Main Container -->
-  <main class="main-container">
+  <main id="main-content" class="main-container">
 
     <!-- ========================================== -->
     <!-- TAB 1: ACCOUNT SUMMARY & BALANCE HISTORY   -->
     <!-- ========================================== -->
-    <section id="tab-summary" class="tab-content active">
+    <section id="tab-summary" class="tab-content active" aria-labelledby="summaryHeading">
+      <h1 id="summaryHeading" class="page-heading">Your money</h1>
+      <div id="dataSourceNotice" class="data-source-notice" role="status" aria-live="polite" hidden></div>
       <!-- High-Level Overview Stats -->
       <div class="summary-overview">
         <div class="summary-stat-box">
@@ -61,24 +63,25 @@
         <div class="card-title">
           <span>Balance vs Time</span>
           <div class="btn-group" id="summaryTimeFilters">
-            <button class="btn btn-sm" data-months="1">1M</button>
-            <button class="btn btn-sm active" data-months="3">3M</button>
-            <button class="btn btn-sm" data-months="6">6M</button>
-            <button class="btn btn-sm" data-months="12">1Y</button>
-            <button class="btn btn-sm" data-months="0">All</button>
+            <button type="button" class="btn btn-sm" data-months="1" aria-pressed="false">1M</button>
+            <button type="button" class="btn btn-sm active" data-months="3" aria-pressed="true">3M</button>
+            <button type="button" class="btn btn-sm" data-months="6" aria-pressed="false">6M</button>
+            <button type="button" class="btn btn-sm" data-months="12" aria-pressed="false">1Y</button>
+            <button type="button" class="btn btn-sm" data-months="0" aria-pressed="false">All</button>
           </div>
         </div>
         <div class="chart-container">
           <canvas id="summaryBalanceChart"></canvas>
+          <p id="summaryHistoryEmpty" class="chart-empty-state" role="status" hidden></p>
         </div>
+        <p class="history-note">Historical balances are estimates reconstructed from posted transactions and the latest balance Plaid returned. Institutions provide different amounts of history; if an account has less history, its earliest available balance is carried backward in the combined chart.</p>
       </div>
 
       <!-- Accounts Listing with Expansion for Individual Charts -->
       <div class="card">
         <div class="card-title">
           <span>Accounts</span>
-          <span style="font-size:0.8rem; color:var(--text-muted); font-weight:normal;">Tap an account to expand
-            history</span>
+          <span style="font-size:0.8rem; color:var(--text-muted); font-weight:normal;">Select an account to expand its history</span>
         </div>
         <div id="accountsListContainer">
           <!-- Account Items dynamically injected -->
@@ -89,19 +92,21 @@
     <!-- ========================================== -->
     <!-- TAB 2: SPENDING BREAKDOWN & BUDGET GOALS   -->
     <!-- ========================================== -->
-    <section id="tab-spending" class="tab-content">
+    <section id="tab-spending" class="tab-content" aria-labelledby="spendingHeading">
+      <h1 id="spendingHeading" class="page-heading">Spending</h1>
       <div class="card">
         <div class="card-title">
           <span>Withdrawals Breakdown</span>
           <div class="btn-group" id="spendingTimeFilters">
-            <button class="btn btn-sm" data-days="30">30 Days</button>
-            <button class="btn btn-sm active" data-days="90">90 Days</button>
-            <button class="btn btn-sm" data-days="180">180 Days</button>
+            <button type="button" class="btn btn-sm" data-days="30" aria-pressed="false">30 Days</button>
+            <button type="button" class="btn btn-sm active" data-days="90" aria-pressed="true">90 Days</button>
+            <button type="button" class="btn btn-sm" data-days="180" aria-pressed="false">180 Days</button>
           </div>
         </div>
 
         <div class="chart-container-pie">
           <canvas id="spendingPieChart"></canvas>
+          <p id="spendingEmptyState" class="chart-empty-state" role="status" hidden></p>
         </div>
       </div>
 
@@ -123,7 +128,8 @@
     <!-- ========================================== -->
     <!-- TAB 3: FINANCIAL PROJECTION TOOL           -->
     <!-- ========================================== -->
-    <section id="tab-projections" class="tab-content">
+    <section id="tab-projections" class="tab-content" aria-labelledby="projectionsHeading">
+      <h1 id="projectionsHeading" class="page-heading">Projections</h1>
       <!-- Top Extrapolation Graph -->
       <div class="card">
         <div class="card-title">
@@ -132,7 +138,9 @@
         </div>
         <div class="chart-container">
           <canvas id="projectionChart"></canvas>
+          <p id="projectionEmptyState" class="chart-empty-state" role="status" hidden></p>
         </div>
+        <p class="history-note">Linear mode shows the fitted historical trend (amber dotted line) and extends its rate from the latest balance. Exponential mode applies the interest and deposit assumptions below. Both are estimates, not forecasts, and do not account for future spending changes.</p>
       </div>
 
       <!-- Projection Parameters Form -->
@@ -205,7 +213,8 @@
     <!-- ========================================== -->
     <!-- TAB 4: SETTINGS & CONFIGURATION            -->
     <!-- ========================================== -->
-    <section id="tab-settings" class="tab-content">
+    <section id="tab-settings" class="tab-content" aria-labelledby="settingsHeading">
+      <h1 id="settingsHeading" class="page-heading">Settings</h1>
 
       <!-- Plaid Connection Setup -->
       <div class="card">
@@ -213,15 +222,19 @@
           <span>Plaid API Connection</span>
           <div class="btn-group">
             <span id="plaidBadge" class="plaid-badge">Mock Mode</span>
-            <button id="btnConnectPlaidLink" class="btn btn-primary btn-sm">Launch Plaid Link</button>
+            <button id="btnConnectPlaidLink" class="btn btn-primary btn-sm">Connect Institution</button>
           </div>
         </div>
         <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
-          Save your Plaid Sandbox credentials, then launch Link and choose a test institution. Your secret stays in memory for this session and is never saved in browser storage. Start this app with <code>node server.js</code> so its local server can securely create Link tokens and exchange them.
+          Start the app from its folder with <code>node server.js</code> or use <strong>Start Budget App.vbs</strong>. Enter your Plaid credentials, select the matching environment, save, and connect an institution. Use <strong>Add Institution</strong> to connect more banks; their accounts and transactions are combined here. After you connect, the server saves the long-lived connection and credentials in a vault encrypted for your Windows account, so the institution normally returns after a restart. A bank may still ask you to re-authenticate if it requires renewed consent or your login changes.
         </p>
         <p id="plaidStatus" class="plaid-status" role="status" aria-live="polite" hidden></p>
+        <div class="plaid-connections" aria-live="polite">
+          <h3>Connected Institutions</h3>
+          <div id="plaidConnectionsList"></div>
+        </div>
 
-        <form id="formPlaidSettings">
+        <form id="formPlaidSettings" autocomplete="off">
           <div class="form-row">
             <div class="form-group">
               <label class="form-label" for="plaidClientId">Plaid Client ID</label>
@@ -265,6 +278,7 @@
       <!-- Budget Goals Editor -->
       <div class="card">
         <div class="card-title">Monthly Budget Goals</div>
+        <p id="settingsStatus" class="plaid-status" role="status" aria-live="polite" hidden></p>
         <form id="formBudgetGoals">
           <div class="form-row" id="budgetGoalsFormGrid">
             <!-- Form fields for Rent, Groceries, Utilities, Leisure, Travel, Other injected -->
@@ -291,6 +305,7 @@
       <!-- Data Backup / Reset / Demo Data -->
       <div class="card">
         <div class="card-title">Data Management</div>
+        <p class="settings-note">Backups include your local account and transaction data. Store exported files securely. Plaid credentials and access tokens are not included.</p>
         <div class="btn-group">
           <button id="btnQuickDemo" class="btn btn-sm btn-primary">Load Demo Data</button>
           <button id="btnExportData" class="btn btn-sm">Export Data (JSON)</button>
@@ -305,6 +320,7 @@
   </main>
 
   <!-- Modular Application JavaScripts -->
+  <script src="js/utils.js"></script>
   <script src="js/plaid.js"></script>
   <script src="js/summary.js"></script>
   <script src="js/spending.js"></script>
