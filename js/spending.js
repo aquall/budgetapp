@@ -46,7 +46,7 @@ window.SpendingModule = (function () {
 
     const catLower = String(defaultCat || "").toLowerCase();
     if (CATEGORY_LABELS[catLower]) return catLower;
-    if (!txName) return "other";
+    if (!txName && !catLower) return "other";
 
     // Default fallback heuristics
     if (nameLower.includes("rent") || nameLower.includes("equity")) return "rent";
@@ -54,6 +54,17 @@ window.SpendingModule = (function () {
     if (nameLower.includes("coned") || nameLower.includes("electric") || nameLower.includes("verizon") || nameLower.includes("water") || nameLower.includes("gas")) return "utilities";
     if (nameLower.includes("steam") || nameLower.includes("starbucks") || nameLower.includes("cafe") || nameLower.includes("cinema") || /\bbar\b/.test(nameLower)) return "leisure";
     if (nameLower.includes("airline") || nameLower.includes("flight") || nameLower.includes("hotel") || nameLower.includes("delta") || nameLower.includes("uber")) return "travel";
+
+    // Plaid's Personal Finance Category values are broader than the app's
+    // budget categories (for example RENT_AND_UTILITIES). Map those values
+    // after merchant-name heuristics so a known utility vendor stays Utilities.
+    if (/rent/.test(catLower)) return "rent";
+    if (/utilit|bill/.test(catLower)) return "utilities";
+    if (/food|grocery/.test(catLower)) return "groceries";
+    if (/travel|transportation/.test(catLower)) return "travel";
+    if (/entertainment|recreation|personal care/.test(catLower)) return "leisure";
+    if (/income|payroll/.test(catLower)) return "income";
+    if (/transfer/.test(catLower)) return "transfer";
 
     return "other";
   }
