@@ -532,6 +532,133 @@ body {
   .transaction-category { width: min(55%, 190px); }
 }
 
+/* iPhone / PWA layout: account for the home indicator and keep all tabs visible. */
+html {
+  min-height: 100%;
+  background: var(--bg-primary);
+  -webkit-text-size-adjust: 100%;
+  scroll-padding-top: 16px;
+}
+
+body {
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  touch-action: manipulation;
+}
+
+.app-nav {
+  padding: 6px max(6px, env(safe-area-inset-left)) calc(6px + env(safe-area-inset-bottom)) max(6px, env(safe-area-inset-right));
+  justify-content: space-around;
+  overflow-x: hidden;
+  background: var(--bg-primary);
+  -webkit-backdrop-filter: blur(18px);
+  backdrop-filter: blur(18px);
+}
+
+.nav-btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 4px;
+  font-size: 0.74rem;
+  gap: 3px;
+}
+
+.nav-icon {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.pwa-install-tip {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-left: 3px solid var(--accent-primary);
+  background: var(--bg-surface-active);
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.pwa-install-tip strong { color: var(--text-main); }
+
+.btn { touch-action: manipulation; }
+.btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+@media (min-width: 768px) {
+  body { min-height: 100vh; padding-top: 0; }
+  .app-nav {
+    padding: 12px 16px;
+    justify-content: flex-start;
+    overflow: visible;
+    background: var(--bg-primary);
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+  .nav-btn {
+    flex: 0 0 auto;
+    min-height: 44px;
+    flex-direction: row;
+    gap: 7px;
+    padding: 8px 12px;
+    font-size: 0.9rem;
+  }
+  .nav-icon { width: 18px; height: 18px; }
+}
+
+@media (max-width: 600px) {
+  body { padding-bottom: calc(72px + env(safe-area-inset-bottom)); }
+  .main-container { padding: 16px 14px 24px; }
+  .page-heading { margin-top: 2px; font-size: 1.45rem; }
+  .nav-btn { min-height: 54px; font-size: 0.66rem; letter-spacing: -0.01em; }
+  .nav-icon { width: 19px; height: 19px; }
+  .card-title { align-items: flex-start; font-size: 0.98rem; }
+  .chart-container,
+  .chart-container-pie { height: 250px; }
+  #summaryTimeFilters,
+  #spendingTimeFilters {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(48px, 1fr));
+    gap: 6px;
+  }
+  #summaryTimeFilters .btn,
+  #spendingTimeFilters .btn { min-height: 40px; padding: 6px 4px; }
+  .form-control { min-height: 44px; padding: 10px 12px; font-size: 16px; }
+  .btn { min-height: 42px; }
+  .btn-sm { min-height: 38px; }
+  .summary-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .summary-stat-box { min-width: 0; padding: 11px 10px; }
+  .summary-stat-box:first-child { grid-column: 1 / -1; }
+  .summary-stat-value { font-size: clamp(1rem, 5vw, 1.25rem); overflow-wrap: anywhere; }
+  .budget-grid { grid-template-columns: minmax(0, 1fr); }
+  .account-header { padding: 12px 10px; }
+  .account-name { font-size: 0.88rem; }
+  .account-balance { font-size: 0.95rem; white-space: nowrap; }
+  .plaid-connection-row { align-items: flex-start; }
+  .plaid-connection-row .btn { flex: 0 0 auto; }
+  .transactions-scroll { max-height: 68dvh; }
+}
+
+@media (max-width: 360px) {
+  .main-container { padding-right: 12px; padding-left: 12px; }
+  .nav-btn { font-size: 0.61rem; }
+  .nav-icon { width: 18px; height: 18px; }
+  .nav-label[data-label-short] { font-size: 0; }
+  .nav-label[data-label-short]::after { content: attr(data-label-short); font-size: 0.61rem; }
+  .summary-stat-label { font-size: 0.68rem; letter-spacing: 0.02em; }
+}
+
 /* Summary Grid Numbers */
 .summary-overview {
   display: grid;
@@ -574,4 +701,14 @@ body {
 
 .badge-savings {
   color: var(--accent-success);
+}
+
+@media (max-width: 600px) {
+  .summary-overview {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-bottom: 20px;
+  }
+  .summary-stat-box:first-child { grid-column: 1 / -1; }
+  .summary-stat-value { font-size: clamp(1rem, 5vw, 1.25rem); overflow-wrap: anywhere; }
 }

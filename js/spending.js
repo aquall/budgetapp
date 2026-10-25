@@ -24,25 +24,25 @@ window.SpendingModule = (function () {
       .replace(/\s+/g, " ");
   }
 
+  function findCategoryRule(txName, keywordRules, amount) {
+    const normalizedName = normalizeCategoryText(txName);
+    const direction = Number(amount) < 0 ? "inflow" : "outflow";
+    return (keywordRules || []).find(rule => {
+      const ruleDirection = rule?.direction || "outflow";
+      const normalizedKeyword = normalizeCategoryText(rule?.keyword);
+      return normalizedKeyword && CATEGORY_LABELS[rule?.category] &&
+        (ruleDirection === "any" || ruleDirection === direction) &&
+        normalizedName.includes(normalizedKeyword);
+    });
+  }
+
   /**
    * Categorizes a transaction description based on user defined keyword rules
    */
   function classifyCategory(txName, defaultCat, keywordRules, amount = 1) {
     const nameLower = String(txName).toLowerCase();
-    const normalizedName = normalizeCategoryText(txName);
-    const direction = Number(amount) < 0 ? "inflow" : "outflow";
-
-    if (keywordRules && Array.isArray(keywordRules)) {
-      for (const rule of keywordRules) {
-        const ruleDirection = rule?.direction || "outflow";
-        const normalizedKeyword = normalizeCategoryText(rule?.keyword);
-        if (typeof rule?.keyword === "string" && rule.keyword &&
-            (ruleDirection === "any" || ruleDirection === direction) &&
-            normalizedKeyword && normalizedName.includes(normalizedKeyword) && CATEGORY_LABELS[rule.category]) {
-          return rule.category;
-        }
-      }
-    }
+    const matchingRule = findCategoryRule(txName, keywordRules, amount);
+    if (matchingRule) return matchingRule.category;
 
     const catLower = String(defaultCat || "").toLowerCase();
     if (CATEGORY_LABELS[catLower]) return catLower;
@@ -94,13 +94,14 @@ window.SpendingModule = (function () {
       // Check if account is spending account
       if (!spendingAccIds.has(tx.accountId)) return;
       if (tx.pending) return;
-      if (/transfer|loan payment/i.test(String(tx.category || ""))) return;
       // Filter for withdrawals (amount > 0 in standard accounting convention)
       const amount = Number(tx.amount);
       if (!Number.isFinite(amount) || amount <= 0) return;
       // Date cutoff filter
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tx.date || "")) || tx.date < cutoffStr) return;
 
+      const hasExplicitCategoryRule = Boolean(findCategoryRule(tx.name, rules, amount));
+      if (!hasExplicitCategoryRule && /transfer|loan payment/i.test(String(tx.category || ""))) return;
       const category = classifyCategory(tx.name, tx.category, rules, amount);
       if (category === "transfer") return;
       withdrawals.push({
@@ -289,6 +290,7 @@ window.SpendingModule = (function () {
 
   return {
     init,
-    classifyCategory
+    classifyCategory,
+    findCategoryRule
   };
 })();
