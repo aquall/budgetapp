@@ -16,6 +16,7 @@
     transactions: [],
     balanceHistory: [],
     accountHistory: {},
+    balanceSnapshots: [],
     dataMode: "demo",
     budgets: {
       rent: 1600,
@@ -57,6 +58,7 @@
         if (!Array.isArray(appState.accounts)) appState.accounts = [];
         if (!Array.isArray(appState.transactions)) appState.transactions = [];
         if (!Array.isArray(appState.balanceHistory)) appState.balanceHistory = [];
+        if (!Array.isArray(appState.balanceSnapshots)) appState.balanceSnapshots = [];
         if (!Array.isArray(appState.keywordRules)) appState.keywordRules = [];
         if (!appState.budgets || typeof appState.budgets !== "object" || Array.isArray(appState.budgets)) appState.budgets = {};
         // Older versions stored secrets and fake access tokens in localStorage. Drop them on load.
@@ -121,6 +123,7 @@
     appState.transactions = mock.transactions;
     appState.balanceHistory = mock.balanceHistory;
     appState.accountHistory = {};
+    appState.balanceSnapshots = [];
     appState.dataMode = "demo";
     saveStateToStorage();
     refreshCurrentView();
@@ -165,13 +168,13 @@
     const accounts = (data.accounts || []).map(account => {
       const subtype = account.subtype || account.type || "account";
       const name = account.name || "Bank account";
-      const rawBalance = Number(account.balances?.current);
-      const currentBalance = Number.isFinite(rawBalance)
-        ? (account.type === "credit" ? -Math.abs(rawBalance) : rawBalance)
-        : 0;
-      const availableBalance = account.balances?.available == null ? currentBalance : Number(account.balances.available);
       const id = account.account_id;
       const existing = currentConnectionAccounts.find(item => item.id === id);
+      const rawBalance = account.balances?.current == null ? NaN : Number(account.balances.current);
+      const currentBalance = Number.isFinite(rawBalance)
+        ? (account.type === "credit" ? -Math.abs(rawBalance) : rawBalance)
+        : (existing?.currentBalance ?? 0);
+      const availableBalance = account.balances?.available == null ? currentBalance : Number(account.balances.available);
       return {
         id,
         name,
@@ -208,6 +211,17 @@
       transaction
     ]));
     appState.transactions = [...byTransactionId.values()];
+    const replacedAccountIds = new Set(currentConnectionAccounts.map(account => account.id));
+    const snapshotDate = new Date().toISOString().slice(0, 10);
+    const incomingBalances = new Map((data.accounts || []).map(account => [
+      account.account_id,
+      account.balances?.current == null ? NaN : Number(account.balances.current)
+    ]));
+    appState.balanceSnapshots = (replaceAll ? [] : (appState.balanceSnapshots || []))
+      .filter(snapshot => !replacedAccountIds.has(snapshot.accountId))
+      .concat(accounts.flatMap(account => Number.isFinite(incomingBalances.get(account.id))
+        ? [{ accountId: account.id, date: snapshotDate, balance: account.currentBalance }]
+        : []));
     appState.dataMode = "plaid";
     rebuildBalanceHistory();
   }
@@ -217,6 +231,7 @@
     if (!accounts.length) {
       appState.accountHistory = {};
       appState.balanceHistory = [];
+      appState.balanceSnapshots = [];
       return;
     }
 
@@ -236,7 +251,11 @@
     accounts.forEach(account => {
       const dailyTotals = transactionsByAccount.get(account.id) || new Map();
       const dates = [...dailyTotals.keys()].filter(date => date <= today).sort();
-      const startDate = dates[0] || today;
+      const snapshots = (appState.balanceSnapshots || [])
+        .filter(snapshot => snapshot.accountId === account.id && /^\d{4}-\d{2}-\d{2}$/.test(snapshot.date || "") && Number.isFinite(Number(snapshot.balance)) && snapshot.date <= today)
+        .sort((a, b) => a.date.localeCompare(b.date));
+      const historyStartDates = [...dates, ...snapshots.map(snapshot => snapshot.date)].sort();
+      const startDate = historyStartDates[0] || today;
       const startTime = Date.parse(`${startDate}T00:00:00Z`);
       let balance = Number(account.currentBalance) || 0;
       const series = [];
@@ -247,7 +266,42 @@
         // Walk backward from the latest balance to estimate each prior end-of-day balance.
         balance += dailyTotals.get(date) || 0;
       }
-      histories[account.id] = series.reverse();
+      const accountSeries = series.reverse();
+
+      // Transaction reconstruction misses market gains and losses. Correct its
+      // daily estimates between directly observed account balance snapshots,
+      // spreading the unexplained movement across the interval while retaining
+      // the transaction movements already present in the series.
+      if (snapshots.length) {
+        const pointByDate = new Map(accountSeries.map((point, index) => [point.date, index]));
+        const anchors = snapshots.filter(snapshot => pointByDate.has(snapshot.date)).map(snapshot => {
+          const index = pointByDate.get(snapshot.date);
+          return {
+            index,
+            correction: Number(snapshot.balance) - accountSeries[index].balance
+          };
+        });
+
+        if (anchors.length) {
+          accountSeries.forEach((point, index) => {
+            let correction = anchors[0].correction;
+            if (index >= anchors[anchors.length - 1].index) {
+              correction = anchors[anchors.length - 1].correction;
+            } else {
+              const nextAnchorIndex = anchors.findIndex(anchor => anchor.index >= index);
+              if (nextAnchorIndex > 0) {
+                const before = anchors[nextAnchorIndex - 1];
+                const after = anchors[nextAnchorIndex];
+                const span = after.index - before.index;
+                const fraction = span ? (index - before.index) / span : 0;
+                correction = before.correction + (after.correction - before.correction) * fraction;
+              }
+            }
+            point.balance = Math.round((point.balance + correction) * 100) / 100;
+          });
+        }
+      }
+      histories[account.id] = accountSeries;
     });
     appState.accountHistory = histories;
 
@@ -281,8 +335,10 @@
 
     try { await window.PlaidModule.disconnectPlaid(connectionId); } catch { /* The server session may already have expired. */ }
     plaidConnections = plaidConnections.filter(item => item.connectionId !== connectionId);
+    const removedAccountIds = new Set(appState.accounts.filter(account => account.plaidConnectionId === connectionId).map(account => account.id));
     appState.accounts = appState.accounts.filter(account => account.plaidConnectionId !== connectionId);
     appState.transactions = appState.transactions.filter(transaction => transaction.plaidConnectionId !== connectionId);
+    appState.balanceSnapshots = (appState.balanceSnapshots || []).filter(snapshot => !removedAccountIds.has(snapshot.accountId));
     rebuildBalanceHistory();
     savePlaidConnections();
     saveStateToStorage();
@@ -716,6 +772,7 @@
             appState.plaidConfig.connections = [];
             appState.plaidConfig.isConnected = false;
             appState.accountHistory = imported.accountHistory && typeof imported.accountHistory === "object" ? imported.accountHistory : {};
+            appState.balanceSnapshots = Array.isArray(imported.balanceSnapshots) ? imported.balanceSnapshots : [];
             appState.budgets = { ...appState.budgets, ...(imported.budgets || {}) };
             appState.keywordRules = Array.isArray(imported.keywordRules)
               ? imported.keywordRules.filter(rule => rule && typeof rule.keyword === "string" && ["rent", "groceries", "utilities", "leisure", "travel", "other"].includes(rule.category))

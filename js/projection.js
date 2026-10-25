@@ -169,10 +169,16 @@ window.ProjectionModule = (function () {
     const ctx = document.getElementById("projectionChart");
     if (!ctx) return;
 
-    const labels = combinedSeries.map(s => s.date);
-    const historicalData = combinedSeries.map(s => s.historical);
-    const trendData = combinedSeries.map(s => s.trend ?? null);
-    const projectedData = combinedSeries.map(s => s.projected);
+    // Use actual timestamps rather than category indices. Historical data is
+    // usually daily while projection points are 15 days apart; category axes
+    // assign both the same width and visually compress the projected horizon.
+    const toDatePoints = (key) => combinedSeries.map(point => ({
+      x: Date.parse(`${point.date}T00:00:00Z`),
+      y: point[key] ?? null
+    }));
+    const historicalData = toDatePoints("historical");
+    const trendData = toDatePoints("trend");
+    const projectedData = toDatePoints("projected");
 
     if (projectionChart) {
       projectionChart.destroy();
@@ -202,7 +208,6 @@ window.ProjectionModule = (function () {
     projectionChart = new Chart(ctx, {
       type: "line",
       data: {
-        labels: labels,
         datasets: [
           {
             label: "Historical Balance",
@@ -250,17 +255,32 @@ window.ProjectionModule = (function () {
             mode: "index",
             intersect: false,
             callbacks: {
+              title: (items) => items.length
+                ? new Date(items[0].raw.x).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" })
+                : "",
               label: (ctx) => {
-                if (ctx.raw == null) return null;
-                return ` ${ctx.dataset.label}: ${formatCurrency(ctx.raw)}`;
+                if (ctx.raw?.y == null) return null;
+                return ` ${ctx.dataset.label}: ${formatCurrency(ctx.raw.y)}`;
               }
             }
           }
         },
+        parsing: false,
         scales: {
           x: {
+            type: "linear",
+            min: Date.parse(`${combinedSeries[0].date}T00:00:00Z`),
+            max: Date.parse(`${combinedSeries[combinedSeries.length - 1].date}T00:00:00Z`),
+            bounds: "data",
+            offset: false,
             grid: { color: "#2d323e" },
-            ticks: { color: "#9aa0a6", maxTicksLimit: 8 }
+            ticks: {
+              color: "#9aa0a6",
+              maxTicksLimit: 8,
+              callback: (value) => new Date(Number(value)).toLocaleDateString(undefined, {
+                year: "numeric", month: "short", day: "numeric", timeZone: "UTC"
+              })
+            }
           },
           y: {
             grid: { color: "#2d323e" },
