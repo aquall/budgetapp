@@ -87,10 +87,13 @@ window.ProjectionModule = (function () {
 
     const lastPt = series[series.length - 1];
     const lastDate = new Date(lastPt.date);
-    const startingBal = lastPt.balance;
+    const lastX = points[points.length - 1].x;
+    const fittedEndingBalance = intercept + slope * lastX;
 
-    // Anchor bridge point at end of historical line
-    historicalFitted[historicalFitted.length - 1].projected = startingBal;
+    // Start the projection from the regression endpoint. Anchoring it to the
+    // latest raw balance offsets the future line from the fitted trend and can
+    // make the green forecast appear to accelerate or jump at the boundary.
+    historicalFitted[historicalFitted.length - 1].projected = Math.round(fittedEndingBalance * 100) / 100;
 
     // Future extrapolation points
     const futurePoints = [];
@@ -102,8 +105,8 @@ window.ProjectionModule = (function () {
       futDate.setUTCDate(futDate.getUTCDate() + d);
       const dateStr = futDate.toISOString().split("T")[0];
       
-      // Smooth linear extrapolation: Y_end + (slope * days)
-      const projectedBal = startingBal + (slope * d);
+      // Continue the fitted trend from its endpoint.
+      const projectedBal = fittedEndingBalance + (slope * d);
 
       futurePoints.push({
         date: dateStr,
