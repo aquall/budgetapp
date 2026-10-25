@@ -383,6 +383,35 @@
     window.ProjectionModule.init(appState, params);
   }
 
+  function normalizeVendorKeyword(value) {
+    return String(value || "")
+      .trim()
+      .replace(/[’']/g, "")
+      .replace(/\s+#.*$/i, "")
+      .replace(/\s+\d{3,}.*$/, "")
+      .replace(/\s+(incorporated|inc|limited|ltd|llc|corp|corporation|company|co)\.?$/i, "")
+      .replace(/[^a-z0-9]+/gi, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
+  function updateTransactionCategory(transaction, category) {
+    const validCategories = Object.keys(window.AppUtils.categoryLabels);
+    if (!transaction || !validCategories.includes(category)) return;
+
+    const direction = Number(transaction.amount) < 0 ? "inflow" : "outflow";
+    const keyword = normalizeVendorKeyword(transaction.name);
+    if (keyword) {
+      const sameRule = rule => normalizeVendorKeyword(rule?.keyword) === keyword && (rule.direction || "outflow") === direction;
+      appState.keywordRules = (appState.keywordRules || []).filter(rule => !sameRule(rule));
+      appState.keywordRules.unshift({ keyword, category, direction });
+    }
+
+    saveStateToStorage();
+    if (currentTab === "spending") window.SpendingModule.init(appState, spendingDays);
+    if (currentTab === "transactions") window.TransactionsModule.refreshCategories(appState);
+  }
+
   /**
    * Refreshes active tab view
    */
@@ -396,6 +425,8 @@
       window.SpendingModule.init(appState, spendingDays);
     } else if (currentTab === "projections") {
       updateProjectionView();
+    } else if (currentTab === "transactions") {
+      window.TransactionsModule.init(appState, updateTransactionCategory);
     } else if (currentTab === "settings") {
       window.SettingsModule.init({ ...appState, plaidSessionConnections: plaidConnections }, {
         onAccountTypeChange: (accId, newType) => {
@@ -775,7 +806,12 @@
             appState.balanceSnapshots = Array.isArray(imported.balanceSnapshots) ? imported.balanceSnapshots : [];
             appState.budgets = { ...appState.budgets, ...(imported.budgets || {}) };
             appState.keywordRules = Array.isArray(imported.keywordRules)
-              ? imported.keywordRules.filter(rule => rule && typeof rule.keyword === "string" && ["rent", "groceries", "utilities", "leisure", "travel", "other"].includes(rule.category))
+              ? imported.keywordRules.filter(rule => rule && typeof rule.keyword === "string" && Object.keys(window.AppUtils.categoryLabels).includes(rule.category))
+                .map(rule => ({
+                  keyword: rule.keyword,
+                  category: rule.category,
+                  direction: ["inflow", "outflow", "any"].includes(rule.direction) ? rule.direction : "outflow"
+                }))
               : appState.keywordRules;
             appState.dataMode = "imported";
             plaidConnections = [];

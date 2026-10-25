@@ -5,6 +5,7 @@ window.SettingsModule = (function () {
   const { escapeHtml } = window.AppUtils;
 
   const CATEGORY_NAMES = window.AppUtils.categoryLabels;
+  const BUDGET_CATEGORIES = ["rent", "groceries", "utilities", "leisure", "travel", "other"];
 
   /**
    * Render Account Spending vs Savings designation toggles
@@ -97,7 +98,7 @@ window.SettingsModule = (function () {
     };
 
     let html = "";
-    Object.keys(CATEGORY_NAMES).forEach(cat => {
+    BUDGET_CATEGORIES.forEach(cat => {
       const val = budgets[cat] !== undefined ? budgets[cat] : 300;
       html += `
         <div class="form-group">
@@ -137,6 +138,11 @@ window.SettingsModule = (function () {
               <option value="${cat}" ${rule.category === cat ? "selected" : ""}>${CATEGORY_NAMES[cat]}</option>
             `).join("")}
           </select>
+          <select class="form-control rule-direction" aria-label="Transaction direction">
+            <option value="outflow" ${(rule.direction || "outflow") === "outflow" ? "selected" : ""}>Withdrawal</option>
+            <option value="inflow" ${rule.direction === "inflow" ? "selected" : ""}>Deposit</option>
+            <option value="any" ${rule.direction === "any" ? "selected" : ""}>Either</option>
+          </select>
           <button type="button" class="btn btn-sm btn-danger btn-remove-rule" aria-label="Remove category rule">Remove</button>
         </div>
       `;
@@ -164,8 +170,9 @@ window.SettingsModule = (function () {
     container.querySelectorAll(".rule-item").forEach(item => {
       const keyword = item.querySelector(".rule-keyword").value.trim();
       const category = item.querySelector(".rule-category").value;
+      const direction = item.querySelector(".rule-direction").value;
       if (keyword) {
-        rules.push({ keyword, category });
+        rules.push({ keyword, category, direction });
       }
     });
 
@@ -187,6 +194,11 @@ window.SettingsModule = (function () {
         ${Object.keys(CATEGORY_NAMES).map(cat => `
           <option value="${cat}">${CATEGORY_NAMES[cat]}</option>
         `).join("")}
+      </select>
+      <select class="form-control rule-direction" aria-label="Transaction direction">
+        <option value="outflow" selected>Withdrawal</option>
+        <option value="inflow">Deposit</option>
+        <option value="any">Either</option>
       </select>
       <button type="button" class="btn btn-sm btn-danger btn-remove-rule" aria-label="Remove category rule">Remove</button>
     `;

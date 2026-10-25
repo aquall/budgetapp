@@ -28,6 +28,9 @@
     <button type="button" class="nav-btn" data-tab="projections">
       <span>Projections</span>
     </button>
+    <button type="button" class="nav-btn" data-tab="transactions">
+      <span>Transactions</span>
+    </button>
     <button type="button" class="nav-btn" data-tab="settings">
       <span>Settings</span>
     </button>
@@ -211,7 +214,24 @@
     </section>
 
     <!-- ========================================== -->
-    <!-- TAB 4: SETTINGS & CONFIGURATION            -->
+    <!-- TAB 4: TRANSACTION REGISTER                -->
+    <!-- ========================================== -->
+    <section id="tab-transactions" class="tab-content" aria-labelledby="transactionsHeading">
+      <h1 id="transactionsHeading" class="page-heading">Transactions</h1>
+      <div class="card">
+        <div class="card-title">All Transactions <span class="transactions-order-note">Newest first</span></div>
+        <p class="history-note transactions-intro">Choose a category to classify matching transactions from the same vendor and direction. The rule is saved in Settings.</p>
+        <p id="transactionsEmpty" class="chart-empty-state" role="status" hidden></p>
+        <div id="transactionsScroll" class="transactions-scroll" tabindex="0" aria-label="Transactions list" hidden>
+          <div id="transactionsList"></div>
+          <p id="transactionsLoadStatus" class="transactions-load-status" role="status" aria-live="polite"></p>
+          <button id="transactionsMoreButton" class="btn btn-sm transactions-more-button" type="button" hidden>Load more</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ========================================== -->
+    <!-- TAB 5: SETTINGS & CONFIGURATION            -->
     <!-- ========================================== -->
     <section id="tab-settings" class="tab-content" aria-labelledby="settingsHeading">
       <h1 id="settingsHeading" class="page-heading">Settings</h1>
@@ -291,7 +311,7 @@
       <div class="card">
         <div class="card-title">Category Keyword Mapping Rules</div>
         <p style="font-size:0.8rem; color:var(--text-muted); margin-bottom:12px;">
-          Withdrawal descriptions matching these keywords are automatically classified into spending categories.
+          Vendor keywords classify matching withdrawals, deposits, or both. Rules created from the Transactions tab are saved here automatically.
         </p>
         <div id="keywordRulesContainer">
           <!-- Keyword rule rows -->
@@ -325,6 +345,7 @@
   <script src="js/summary.js"></script>
   <script src="js/spending.js"></script>
   <script src="js/projection.js"></script>
+  <script src="js/transactions.js"></script>
   <script src="js/settings.js"></script>
   <script src="js/app.js"></script>
 </body>

@@ -119,7 +119,8 @@ body {
   background: var(--bg-primary);
   border-top: 1px solid var(--border-color);
   display: flex;
-  justify-content: space-around;
+  justify-content: flex-start;
+  overflow-x: auto;
   padding: 8px 0;
   z-index: 200;
 }
@@ -141,12 +142,13 @@ body {
 }
 
 .nav-btn {
+  flex: 0 0 auto;
   background: none;
   border: none;
   color: var(--text-muted);
   font-size: 0.9rem;
   font-weight: 600;
-  padding: 8px 16px;
+  padding: 8px 12px;
   cursor: pointer;
   display: flex;
   flex-direction: column;
@@ -439,14 +441,95 @@ body {
 
 /* Key-Value Rules List */
 .rule-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(100px, 1fr) minmax(100px, 150px) minmax(110px, 150px) auto;
   align-items: center;
   gap: 8px;
   margin-bottom: 8px;
 }
 
-.rule-item input, .rule-item select {
-  flex: 1;
+.transactions-order-note {
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.transactions-intro { margin: -14px 0 12px; }
+.transactions-scroll {
+  max-height: min(72vh, 760px);
+  overflow: auto;
+  border-top: 1px solid var(--border-color);
+}
+.transaction-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 4px;
+  border-bottom: 1px solid var(--border-color);
+}
+.transaction-details { min-width: 0; }
+.transaction-vendor {
+  overflow: hidden;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.transaction-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  margin-top: 3px;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+}
+.transaction-pending { color: var(--accent-warning); }
+.transaction-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.transaction-amount {
+  min-width: 112px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.transaction-amount.is-deposit { color: var(--accent-success); }
+.transaction-amount.is-withdrawal { color: var(--accent-danger); }
+.transaction-category { width: 142px; padding: 6px 8px; }
+.transactions-load-status {
+  padding: 12px;
+  color: var(--text-muted);
+  text-align: center;
+  font-size: 0.75rem;
+}
+.transactions-more-button { display: block; margin: 0 auto 12px; }
+.transactions-more-button[hidden] { display: none; }
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (max-width: 600px) {
+  .rule-item { grid-template-columns: 1fr 1fr; }
+  .rule-item .rule-keyword { grid-column: 1 / -1; }
+  .rule-item .btn-remove-rule { justify-self: end; }
+  .transaction-row { grid-template-columns: 1fr; gap: 8px; }
+  .transaction-actions { justify-content: space-between; }
+  .transaction-amount { min-width: auto; text-align: left; }
+  .transaction-category { width: min(55%, 190px); }
 }
 
 /* Summary Grid Numbers */

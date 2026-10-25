@@ -16,16 +16,29 @@ window.SpendingModule = (function () {
 
   const CATEGORY_LABELS = window.AppUtils.categoryLabels;
 
+  function normalizeCategoryText(value) {
+    return String(value || "").toLowerCase()
+      .replace(/[’']/g, "")
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim()
+      .replace(/\s+/g, " ");
+  }
+
   /**
    * Categorizes a transaction description based on user defined keyword rules
    */
-  function classifyCategory(txName, defaultCat, keywordRules) {
-    if (!txName) return defaultCat || "other";
+  function classifyCategory(txName, defaultCat, keywordRules, amount = 1) {
     const nameLower = String(txName).toLowerCase();
+    const normalizedName = normalizeCategoryText(txName);
+    const direction = Number(amount) < 0 ? "inflow" : "outflow";
 
     if (keywordRules && Array.isArray(keywordRules)) {
       for (const rule of keywordRules) {
-        if (typeof rule?.keyword === "string" && rule.keyword && nameLower.includes(rule.keyword.toLowerCase())) {
+        const ruleDirection = rule?.direction || "outflow";
+        const normalizedKeyword = normalizeCategoryText(rule?.keyword);
+        if (typeof rule?.keyword === "string" && rule.keyword &&
+            (ruleDirection === "any" || ruleDirection === direction) &&
+            normalizedKeyword && normalizedName.includes(normalizedKeyword) && CATEGORY_LABELS[rule.category]) {
           return rule.category;
         }
       }
@@ -33,6 +46,7 @@ window.SpendingModule = (function () {
 
     const catLower = String(defaultCat || "").toLowerCase();
     if (CATEGORY_LABELS[catLower]) return catLower;
+    if (!txName) return "other";
 
     // Default fallback heuristics
     if (nameLower.includes("rent") || nameLower.includes("equity")) return "rent";
@@ -76,7 +90,8 @@ window.SpendingModule = (function () {
       // Date cutoff filter
       if (!/^\d{4}-\d{2}-\d{2}$/.test(String(tx.date || "")) || tx.date < cutoffStr) return;
 
-      const category = classifyCategory(tx.name, tx.category, rules);
+      const category = classifyCategory(tx.name, tx.category, rules, amount);
+      if (category === "transfer") return;
       withdrawals.push({
         ...tx,
         amount,

@@ -5,7 +5,9 @@ window.AppUtils = Object.freeze({
     utilities: "Utilities",
     leisure: "Leisure",
     travel: "Travel",
-    other: "Other"
+    other: "Other",
+    income: "Income",
+    transfer: "Transfer"
   }),
 
   formatCurrency(value) {
